@@ -19,26 +19,19 @@ const WINDOW_MS = 60_000;
 const RETENTION_MS = 60 * 60_000;
 const PRUNE_PROBABILITY = 1 / 50;
 
-type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
-
-/** Counts and records one attempt for `subject` atomically (advisory lock per key). */
-async function consume(tx: Tx, eventId: string, subject: string, kind: string, limit: number, now: Date) {
-  // pg_advisory_xact_lock returns void, which Prisma cannot deserialize; select a constant.
-  await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${`${eventId}:${kind}:${subject}`}))`;
-  const recent = await tx.submitAttempt.count({
-    where: { eventId, deviceId: subject, kind, createdAt: { gt: new Date(now.getTime() - WINDOW_MS) } },
-  });
-  if (recent >= limit) return false;
-  await tx.submitAttempt.create({ data: { eventId, deviceId: subject, kind, createdAt: now }, select: { id: true } });
-  return true;
-}
-
 /** Ticket strings are long and sensitive; store only a short hash as the subject. */
 const ticketSubject = (ticket: string) => `t:${createHash("sha256").update(ticket).digest("base64url").slice(0, 22)}`;
 
+interface Bucket {
+  subject: string;
+  kind: string;
+  limit: number;
+}
+
 /**
- * Records one attempt and returns false when either the device or the ticket used
- * its quota for the last minute. Occasionally prunes this event's rows older than 1 h.
+ * Records one attempt and returns false when either the ticket or the device used
+ * its quota for the last minute. Three statements in one transaction: lock both
+ * buckets (advisory locks, always in the same order), count both, insert both.
  */
 export async function consumeAttempt(input: {
   eventId: string;
@@ -48,10 +41,32 @@ export async function consumeAttempt(input: {
   now?: Date;
 }): Promise<boolean> {
   const now = input.now ?? new Date();
+  const buckets: Bucket[] = [
+    { subject: ticketSubject(input.ticket), kind: `${input.kind}_TICKET`, limit: RATE_LIMIT_PER_TICKET[input.kind] },
+    { subject: input.deviceId, kind: input.kind, limit: RATE_LIMIT_PER_DEVICE[input.kind] },
+  ];
+  const [ticketKey, deviceKey] = buckets.map((bucket) => `${input.eventId}:${bucket.kind}:${bucket.subject}`);
+
   const allowed = await db.$transaction(async (tx) => {
-    const ticketOk = await consume(tx, input.eventId, ticketSubject(input.ticket), `${input.kind}_TICKET`, RATE_LIMIT_PER_TICKET[input.kind], now);
-    if (!ticketOk) return false;
-    return consume(tx, input.eventId, input.deviceId, input.kind, RATE_LIMIT_PER_DEVICE[input.kind], now);
+    // pg_advisory_xact_lock returns void, which Prisma cannot deserialize; select a constant.
+    await tx.$queryRaw`SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtext(${ticketKey})), pg_advisory_xact_lock(hashtext(${deviceKey}))) AS locks`;
+    const counts = await tx.submitAttempt.groupBy({
+      by: ["deviceId", "kind"],
+      where: {
+        eventId: input.eventId,
+        createdAt: { gt: new Date(now.getTime() - WINDOW_MS) },
+        OR: buckets.map((bucket) => ({ deviceId: bucket.subject, kind: bucket.kind })),
+      },
+      _count: { _all: true },
+    });
+    const countOf = (bucket: Bucket) =>
+      counts.find((row) => row.deviceId === bucket.subject && row.kind === bucket.kind)?._count._all ?? 0;
+    if (buckets.some((bucket) => countOf(bucket) >= bucket.limit)) return false;
+
+    await tx.submitAttempt.createMany({
+      data: buckets.map((bucket) => ({ eventId: input.eventId, deviceId: bucket.subject, kind: bucket.kind, createdAt: now })),
+    });
+    return true;
   });
 
   if (Math.random() < PRUNE_PROBABILITY) {

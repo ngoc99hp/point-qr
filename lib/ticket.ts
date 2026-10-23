@@ -50,29 +50,35 @@ export function verifyQrToken(
 }
 
 interface TicketPayload {
+  /** roundId */
   r: string;
+  /** eventId — binds the ticket to its event and spares a lookup by code. */
+  e: string;
   iat: number;
   exp: number;
 }
+
+const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 
 function isTicketPayload(value: unknown): value is TicketPayload {
   return (
     typeof value === "object" &&
     value !== null &&
     "r" in value &&
+    "e" in value &&
     "iat" in value &&
     "exp" in value &&
-    typeof value.r === "string" &&
-    value.r.length > 0 &&
+    isNonEmptyString(value.r) &&
+    isNonEmptyString(value.e) &&
     typeof value.iat === "number" &&
     typeof value.exp === "number"
   );
 }
 
-/** ticket = base64url(JSON{ r, iat, exp }) + "." + base64url(HMAC) — valid 15 minutes. */
-export function issueTicket(roundId: string, secret: string, now: number): string {
+/** ticket = base64url(JSON{ r, e, iat, exp }) + "." + base64url(HMAC) — valid 15 minutes. */
+export function issueTicket(round: { roundId: string; eventId: string }, secret: string, now: number): string {
   const iat = Math.floor(now / 1000);
-  const payload: TicketPayload = { r: roundId, iat, exp: iat + TICKET_TTL_SECONDS };
+  const payload: TicketPayload = { r: round.roundId, e: round.eventId, iat, exp: iat + TICKET_TTL_SECONDS };
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   return `${encoded}.${hmac(secret, "ticket", encoded)}`;
 }
@@ -81,7 +87,7 @@ export function verifyTicket(
   ticket: string,
   secret: string,
   now: number,
-): { ok: true; roundId: string; expiresAt: number } | VerifyFailure {
+): { ok: true; roundId: string; eventId: string; expiresAt: number } | VerifyFailure {
   const parts = ticket.split(".");
   const [encoded, signature] = parts;
   if (parts.length !== 2 || !encoded || !signature) return { ok: false, reason: "INVALID" };
@@ -95,5 +101,5 @@ export function verifyTicket(
   }
   if (!isTicketPayload(payload)) return { ok: false, reason: "INVALID" };
   if (Math.floor(now / 1000) >= payload.exp) return { ok: false, reason: "EXPIRED" };
-  return { ok: true, roundId: payload.r, expiresAt: payload.exp * 1000 };
+  return { ok: true, roundId: payload.r, eventId: payload.e, expiresAt: payload.exp * 1000 };
 }

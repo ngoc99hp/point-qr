@@ -189,7 +189,7 @@ export interface TicketRatingInput extends Omit<SaveRatingInput, "roundId"> {
  */
 export async function submitWithTicket(input: TicketRatingInput): Promise<SubmitRatingResult> {
   const { ticket, now, ...rating } = input;
-  const gate = await passTicketGate({ eventCode: rating.eventCode, ticket, deviceId: rating.deviceId, kind: "SUBMIT", now });
+  const gate = await passTicketGate({ ticket, deviceId: rating.deviceId, kind: "SUBMIT", now });
   if (!gate.ok) return gate.failure;
   return processRating({ ...rating, roundId: gate.roundId });
 }

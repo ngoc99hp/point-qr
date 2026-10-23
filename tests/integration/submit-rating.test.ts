@@ -188,7 +188,7 @@ describe("submitRating against the database", () => {
 });
 
 describe("checkStudentCodeStatus (D4, ticket-gated in P3)", () => {
-  const check = (studentCode: string, ticket = issueTicket(roundA, env.TICKET_SECRET, Date.now())) =>
+  const check = (studentCode: string, ticket = issueTicket({ roundId: roundA, eventId }, env.TICKET_SECRET, Date.now())) =>
     checkStudentCodeStatus({ eventCode, ticket, deviceId: randomUUID(), studentCode });
 
   it("reports each roster status without exposing roster data", async () => {
@@ -196,7 +196,7 @@ describe("checkStudentCodeStatus (D4, ticket-gated in P3)", () => {
     expect(await check(UNKNOWN_CODE)).toBe("NOT_IN_ROSTER");
     expect(await check(STUDENT_IN_A.code)).toBe("SELF_RATING");
     expect(await check("ABC")).toBe("INVALID_FORMAT");
-    expect(await check(STUDENT_B1.code, issueTicket("no-such-round", env.TICKET_SECRET, Date.now()))).toBe("ROUND_CLOSED");
+    expect(await check(STUDENT_B1.code, issueTicket({ roundId: "no-such-round", eventId }, env.TICKET_SECRET, Date.now()))).toBe("ROUND_CLOSED");
   });
 
   it("refuses without a valid ticket (no roster oracle from outside the class)", async () => {
@@ -205,7 +205,7 @@ describe("checkStudentCodeStatus (D4, ticket-gated in P3)", () => {
 
   it("rate limits checks to 30 per minute per device", async () => {
     const deviceId = randomUUID();
-    const ticket = issueTicket(roundA, env.TICKET_SECRET, Date.now());
+    const ticket = issueTicket({ roundId: roundA, eventId }, env.TICKET_SECRET, Date.now());
     const statuses = [];
     for (let i = 0; i < 31; i += 1) {
       statuses.push(await checkStudentCodeStatus({ eventCode, ticket, deviceId, studentCode: STUDENT_B1.code }));
@@ -216,7 +216,8 @@ describe("checkStudentCodeStatus (D4, ticket-gated in P3)", () => {
 });
 
 describe("submitWithTicket (SPEC §9.2, §9.3)", () => {
-  const ticketFor = (roundId: string, now = Date.now()) => issueTicket(roundId, env.TICKET_SECRET, now);
+  const ticketFor = (roundId: string, now = Date.now(), forEvent = eventId) =>
+    issueTicket({ roundId, eventId: forEvent }, env.TICKET_SECRET, now);
   const submit = (overrides: Partial<TicketRatingInput>) =>
     submitWithTicket({
       eventCode,
@@ -244,7 +245,7 @@ describe("submitWithTicket (SPEC §9.2, §9.3)", () => {
 
   it("rejects a forged ticket and a ticket for a round of another event", async () => {
     expect(await submit({ ticket: "eyJyIjoiYSJ9.forged" })).toMatchObject({ success: false, error: { code: "TICKET_INVALID" } });
-    expect(await submit({ ticket: ticketFor("round-of-another-event") })).toMatchObject({
+    expect(await submit({ ticket: ticketFor("round-of-another-event", Date.now(), "another-event") })).toMatchObject({
       success: false,
       error: { code: "TICKET_INVALID" },
     });

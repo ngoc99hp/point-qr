@@ -1,7 +1,7 @@
 import "server-only";
 import { fail } from "@/lib/action-result";
-import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { isForeignKeyViolation } from "@/lib/prisma-errors";
 import { consumeAttempt, type AttemptKind } from "@/lib/ratings/rate-limit";
 import { verifyTicket } from "@/lib/ticket";
 
@@ -15,12 +15,11 @@ export type GateResult =
   | { ok: false; failure: ReturnType<typeof fail<GateFailureCode>> };
 
 /**
- * Shared entry check for public student calls (SPEC §7 steps 2–3):
- * verify the ticket (§9.2), resolve the event by code, then rate limit by device (§9.3).
- * The round itself is re-checked (belongs to the event, OPEN) by the caller.
+ * Shared entry check for public student calls (SPEC §7 steps 2–3): verify the
+ * ticket (§9.2, which carries its signed eventId) and rate limit by device and
+ * ticket (§9.3). The caller re-checks that the round belongs to the event and is OPEN.
  */
 export async function passTicketGate(input: {
-  eventCode: string;
   ticket: string;
   deviceId: string;
   kind: AttemptKind;
@@ -32,17 +31,19 @@ export async function passTicketGate(input: {
     return { ok: false, failure: fail(code, RESCAN_MESSAGE) };
   }
 
-  const event = await db.event.findUnique({ where: { code: input.eventCode }, select: { id: true } });
-  if (!event) return { ok: false, failure: fail("TICKET_INVALID", RESCAN_MESSAGE) };
-
-  const allowed = await consumeAttempt({
-    eventId: event.id,
-    deviceId: input.deviceId,
-    ticket: input.ticket,
-    kind: input.kind,
-  });
-  if (!allowed) {
-    return { ok: false, failure: fail("RATE_LIMITED", RATE_LIMITED_MESSAGE) };
+  let allowed: boolean;
+  try {
+    allowed = await consumeAttempt({
+      eventId: verified.eventId,
+      deviceId: input.deviceId,
+      ticket: input.ticket,
+      kind: input.kind,
+    });
+  } catch (error) {
+    // A validly signed ticket whose event was deleted since it was issued.
+    if (isForeignKeyViolation(error)) return { ok: false, failure: fail("TICKET_INVALID", RESCAN_MESSAGE) };
+    throw error;
   }
-  return { ok: true, roundId: verified.roundId, eventId: event.id };
+  if (!allowed) return { ok: false, failure: fail("RATE_LIMITED", RATE_LIMITED_MESSAGE) };
+  return { ok: true, roundId: verified.roundId, eventId: verified.eventId };
 }

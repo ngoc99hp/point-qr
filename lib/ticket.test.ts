@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   QR_WINDOW_SECONDS,
@@ -11,6 +12,7 @@ import {
 const SECRET = "s".repeat(48);
 const OTHER_SECRET = "o".repeat(48);
 const ROUND = "cmround123";
+const EVENT = "cmevent456";
 const T0 = Date.UTC(2026, 9, 23, 8, 0, 0); // aligned to a 30 s window
 
 describe("QR token (SPEC §9.1)", () => {
@@ -49,33 +51,41 @@ describe("QR token (SPEC §9.1)", () => {
 
 describe("ticket (SPEC §9.2)", () => {
   it("verifies within 15 minutes and returns its round and expiry", () => {
-    const ticket = issueTicket(ROUND, SECRET, T0);
+    const ticket = issueTicket({ roundId: ROUND, eventId: EVENT }, SECRET, T0);
     expect(verifyTicket(ticket, SECRET, T0 + (TICKET_TTL_SECONDS - 1) * 1000)).toEqual({
       ok: true,
       roundId: ROUND,
+      eventId: EVENT,
       expiresAt: T0 + TICKET_TTL_SECONDS * 1000,
     });
   });
 
   it("rejects an expired ticket", () => {
-    const ticket = issueTicket(ROUND, SECRET, T0);
+    const ticket = issueTicket({ roundId: ROUND, eventId: EVENT }, SECRET, T0);
     expect(verifyTicket(ticket, SECRET, T0 + TICKET_TTL_SECONDS * 1000)).toEqual({ ok: false, reason: "EXPIRED" });
   });
 
   it("rejects a wrong signature and a tampered round (cannot be reused for another round)", () => {
-    const ticket = issueTicket(ROUND, SECRET, T0);
+    const ticket = issueTicket({ roundId: ROUND, eventId: EVENT }, SECRET, T0);
     expect(verifyTicket(ticket, OTHER_SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
 
     const [, signature] = ticket.split(".");
-    const forgedPayload = Buffer.from(JSON.stringify({ r: "otherround", iat: T0 / 1000, exp: T0 / 1000 + 900 })).toString("base64url");
+    const forgedPayload = Buffer.from(JSON.stringify({ r: "otherround", e: EVENT, iat: T0 / 1000, exp: T0 / 1000 + 900 })).toString("base64url");
     expect(verifyTicket(`${forgedPayload}.${signature}`, SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
   });
 
   it("cannot be confused with a QR token (domain separation)", () => {
     const token = signQrToken(ROUND, SECRET, T0);
-    const ticket = issueTicket(ROUND, SECRET, T0);
+    const ticket = issueTicket({ roundId: ROUND, eventId: EVENT }, SECRET, T0);
     expect(verifyTicket(token, SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
     expect(verifyQrToken(ticket, SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
+  });
+
+  it("binds the ticket to its event (a payload without an event is invalid)", () => {
+    const legacy = Buffer.from(JSON.stringify({ r: ROUND, iat: T0 / 1000, exp: T0 / 1000 + 900 })).toString("base64url");
+    // Correctly signed, so only the missing `e` makes it invalid.
+    const signature = createHmac("sha256", SECRET).update(`ticket:${legacy}`).digest("base64url");
+    expect(verifyTicket(`${legacy}.${signature}`, SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
   });
 
   it("rejects malformed tickets", () => {

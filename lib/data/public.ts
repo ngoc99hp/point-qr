@@ -7,9 +7,10 @@ import type { ScoreConfig } from "@/lib/score";
 import { TICKET_TTL_SECONDS, issueTicket, verifyQrToken } from "@/lib/ticket";
 import type { IssuedTicket, PublicCurrentResponse } from "@/lib/types/live";
 
-function ticketFor(roundId: string, groupName: string, now: number): IssuedTicket {
+function ticketFor(round: { roundId: string; eventId: string }, groupName: string, now: number): IssuedTicket {
+  const { roundId } = round;
   return {
-    value: issueTicket(roundId, env.TICKET_SECRET, now),
+    value: issueTicket(round, env.TICKET_SECRET, now),
     roundId,
     groupName,
     expiresAt: now + TICKET_TTL_SECONDS * 1000,
@@ -49,7 +50,7 @@ export async function getPublicCurrent(
       ? {
           roundId: open.id,
           groupName: open.group.name,
-          ticket: event.rotatingQr ? null : ticketFor(open.id, open.group.name, now),
+          ticket: event.rotatingQr ? null : ticketFor({ roundId: open.id, eventId: event.id }, open.group.name, now),
         }
       : null,
   };
@@ -71,9 +72,9 @@ export async function exchangeQrToken(
 
   const round = await db.round.findFirst({
     where: { id: verified.roundId, status: "OPEN", event: { code, status: { not: "ARCHIVED" } } },
-    select: { id: true, group: { select: { name: true } } },
+    select: { id: true, eventId: true, group: { select: { name: true } } },
   });
-  return round ? ticketFor(round.id, round.group.name, now) : null;
+  return round ? ticketFor({ roundId: round.id, eventId: round.eventId }, round.group.name, now) : null;
 }
 
 export interface PublicEventForm {
