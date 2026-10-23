@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
 import { submitRating, type SubmitRatingResult } from "@/app/actions/ratings";
 import { getOrCreateDeviceId, saveStudent } from "@/lib/student-storage";
+import type { Notice } from "./student-ui";
 
 export type FieldErrors = Partial<Record<"studentCode" | "studentName" | "score", string>>;
 
@@ -20,10 +20,11 @@ interface SubmissionInput {
   score: number | null;
 }
 
-/** Submit flow for one round's form: validation of the score, server call, feedback. */
+/** Submit flow for one round's form: score check, server call, inline feedback. */
 export function useRatingSubmission(onStale: () => void) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleResult(result: SubmitRatingResult, input: SubmissionInput & { score: number }) {
@@ -31,14 +32,14 @@ export function useRatingSubmission(onStale: () => void) {
       // Remember only details the server accepted, for autofill on the next group.
       saveStudent({ studentCode: input.studentCode, studentName: input.studentName });
       setSubmitted({ score: input.score, status: result.data.status });
-      toast.success(result.data.status === "created" ? "Đã gửi điểm." : "Đã cập nhật điểm.");
+      setNotice({ kind: "success", text: result.data.status === "created" ? "Đã gửi điểm." : "Đã cập nhật điểm." });
       return;
     }
     const { code, message, field } = result.error;
     if (field === "studentCode" || field === "studentName" || field === "score") {
       setErrors({ [field]: message });
     } else {
-      toast.error(message);
+      setNotice({ kind: "error", text: message });
     }
     if (code === "ROUND_CLOSED" || code === "TICKET_INVALID" || code === "TICKET_EXPIRED") onStale();
   }
@@ -46,6 +47,7 @@ export function useRatingSubmission(onStale: () => void) {
   function submit(input: SubmissionInput) {
     if (isPending) return;
     const { score } = input;
+    setNotice(null);
     if (score === null) {
       setErrors({ score: "Vui lòng chọn điểm." });
       return;
@@ -63,10 +65,10 @@ export function useRatingSubmission(onStale: () => void) {
         });
         handleResult(result, { ...input, score });
       } catch {
-        toast.error("Không gửi được. Kiểm tra kết nối mạng rồi thử lại.");
+        setNotice({ kind: "error", text: "Không gửi được. Kiểm tra kết nối mạng rồi thử lại." });
       }
     });
   }
 
-  return { errors, submitted, isPending, submit };
+  return { errors, submitted, notice, isPending, submit };
 }

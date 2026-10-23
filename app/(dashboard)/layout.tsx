@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function DashboardLayout({ children }: LayoutProps<"/">) {
   return (
@@ -20,6 +21,7 @@ export default function DashboardLayout({ children }: LayoutProps<"/">) {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+      <Toaster richColors position="top-center" />
     </div>
   );
 }

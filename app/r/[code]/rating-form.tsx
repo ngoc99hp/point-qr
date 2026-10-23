@@ -4,13 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { FieldError } from "@/components/field-error";
 import { QueryProvider } from "@/components/query-provider";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { parseStudent, readStudentRaw } from "@/lib/student-storage";
 import { resolveStudentSession, type RescanReason } from "@/lib/student-session";
 import type { IssuedTicket, PublicCurrentResponse } from "@/lib/types/live";
 import { ScoreGrid } from "./score-grid";
+import { NoticeBanner, StudentButton, StudentLabel } from "./student-ui";
 import { useRatingSubmission } from "./use-rating-submission";
 import { useStudentCodeCheck } from "./use-student-code-check";
 
@@ -123,7 +122,7 @@ function ScoringForm({ eventCode, ticket, scoreOptions, onStale }: ScoringFormPr
   const studentCode = codeDraft ?? stored?.studentCode ?? "";
   const studentName = nameDraft ?? stored?.studentName ?? "";
 
-  const { errors, submitted, isPending, submit } = useRatingSubmission(onStale);
+  const { errors, submitted, notice, isPending, submit } = useRatingSubmission(onStale);
   const codeCheck = useStudentCodeCheck({ eventCode, roundId: ticket.roundId, ticket: ticket.value, studentCode });
   // D4: server-side submit errors win; otherwise show the live roster hint.
   const studentCodeError = errors.studentCode ?? codeCheck.hint;
@@ -165,15 +164,16 @@ function ScoringForm({ eventCode, ticket, scoreOptions, onStale }: ScoringFormPr
       />
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
-          <Label>Điểm</Label>
+          <StudentLabel id="score-label">Điểm</StudentLabel>
           <span className="text-2xl font-bold tabular-nums">{score === null ? "—" : formatScore(score)}</span>
         </div>
         <ScoreGrid options={scoreOptions} value={score} onChange={setScore} disabled={isPending} describedBy={errors.score ? "score-error" : undefined} />
         <FieldError id="score-error" message={errors.score} />
       </div>
-      <Button type="submit" size="lg" className="h-14 text-lg" disabled={isPending}>
+      <NoticeBanner notice={notice} />
+      <StudentButton type="submit" className="h-14 text-lg" disabled={isPending}>
         {isPending ? "Đang gửi…" : submitted ? "Cập nhật điểm" : "Gửi điểm"}
-      </Button>
+      </StudentButton>
     </form>
   );
 }
@@ -193,7 +193,7 @@ interface TextFieldProps {
 function TextField({ id, label, value, onChange, onBlur, error, disabled, inputMode, autoComplete }: TextFieldProps) {
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>{label}</Label>
+      <StudentLabel htmlFor={id}>{label}</StudentLabel>
       <Input
         id={id}
         value={value}
