@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import type { QrTokenResponse } from "@/lib/types/live";
 
-/** Tokens are valid for 30–60 s (SPEC §9.1); refresh well inside that window. */
-const QR_TOKEN_REFRESH_MS = 20_000;
+/** Tokens are valid for 30–60 s (SPEC §9.1); a 12 s refresh leaves ≥ 18 s to scan. */
+const QR_TOKEN_REFRESH_MS = 12_000;
 
 async function fetchQrToken(eventId: string): Promise<QrTokenResponse> {
   const response = await fetch(`/api/events/${eventId}/qr-token`, { cache: "no-store" });

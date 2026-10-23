@@ -671,7 +671,16 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
   - Dùng bảng nhẹ `SubmitAttempt(eventId, deviceId, kind, createdAt)`.
   - `submitRating`: tối đa **10 lần/phút/thiết bị/event** → `RATE_LIMITED` ("Bạn gửi quá nhanh. Vui lòng đợi một chút rồi thử lại.").
   - `checkStudentCode`: tối đa **30 lần/phút/thiết bị/event**, nhận thêm `deviceId`, quá giới hạn thì trả trạng thái `RATE_LIMITED`.
-  - Bản ghi cũ hơn 1 giờ của event được xóa dần mỗi khi ghi thêm. Không rate limit theo IP.
+  - **Thêm giới hạn theo ticket:** 20 submit và 60 check mỗi phút cho mỗi ticket (lưu hash của ticket). Như vậy một ticket không thể ghép với vô số `deviceId` ngẫu nhiên.
+  - Đếm và ghi được thực hiện **nguyên tử**, nhờ `pg_advisory_xact_lock` cho từng (event, loại, chủ thể).
+  - Bản ghi cũ hơn 1 giờ được dọn theo xác suất (khoảng 1/50 lần ghi). Không rate limit theo IP.
+- **Đồng hồ:** endpoint `current` trả kèm `serverNow`. Trang SV so hạn ticket theo đồng hồ server, không theo đồng hồ điện thoại.
+- Sau khi đổi token lấy ticket, trang SV xóa `?t=` khỏi thanh địa chỉ. Màn chiếu làm mới token mỗi 12 giây.
+- `ipHash = HMAC-SHA256(TICKET_SECRET, "ip:" + ip)`, có tiền tố miền riêng.
+- **Chấp nhận (đã biết):**
+  - Ticket còn hiệu lực tối đa 15 phút sau khi SV rời phòng, nếu round đó vẫn mở hoặc được mở lại.
+  - Ticket phát ra trước khi GV bật QR xoay vòng vẫn dùng được đến khi hết hạn.
+  - `deviceId` do client tự sinh (§9.4).
 - **Không đổi:** cờ, loại phiếu, roster, xếp hạng (P2).
 
 ### P4: Hoàn thiện

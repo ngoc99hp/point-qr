@@ -1,22 +1,22 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
-import { toast } from "sonner";
-import { submitRating, type SubmitRatingResult } from "@/app/actions/ratings";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { FieldError } from "@/components/field-error";
 import { QueryProvider } from "@/components/query-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getOrCreateDeviceId, parseStudent, readStudentRaw, saveStudent } from "@/lib/student-storage";
+import { parseStudent, readStudentRaw } from "@/lib/student-storage";
 import { resolveStudentSession, type RescanReason } from "@/lib/student-session";
 import type { IssuedTicket, PublicCurrentResponse } from "@/lib/types/live";
 import { ScoreGrid } from "./score-grid";
+import { useRatingSubmission } from "./use-rating-submission";
 import { useStudentCodeCheck } from "./use-student-code-check";
 
 const POLL_CURRENT_MS = 3_000;
 const subscribeNoop = () => () => {};
+const formatScore = (score: number) => String(score).replace(".", ",");
 
 const RESCAN_MESSAGE: Record<RescanReason, string> = {
   MISSING: "Vui lòng quét mã QR trên màn chiếu để bắt đầu chấm.",
@@ -48,8 +48,19 @@ async function fetchCurrent(eventCode: string): Promise<PublicCurrentResponse> {
   return (await response.json()) as PublicCurrentResponse;
 }
 
+/** The QR token has been exchanged; drop it from the address bar, history and Referer. */
+function useStripQrToken() {
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("t")) return;
+    url.searchParams.delete("t");
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+}
+
 function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent, entryTicket }: RatingFormProps) {
-  const { data, dataUpdatedAt, refetch } = useQuery({
+  useStripQrToken();
+  const { data, refetch } = useQuery({
     queryKey: ["current", eventCode],
     queryFn: () => fetchCurrent(eventCode),
     initialData: initialCurrent,
@@ -58,12 +69,12 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
     // initialData comes from the server render; don't refetch immediately on mount.
     staleTime: POLL_CURRENT_MS - 500,
   });
-  // The last poll time doubles as the clock for ticket expiry (no Date.now() in render).
+  // Ticket expiry is judged on the server's clock from the latest poll, never the phone's.
   const session = resolveStudentSession({
     rotatingQr: data.event.rotatingQr,
     current: data.current,
     entryTicket,
-    now: dataUpdatedAt,
+    now: data.serverNow,
   });
 
   return (
@@ -93,8 +104,6 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
   );
 }
 
-type FieldErrors = Partial<Record<"studentCode" | "studentName" | "score", string>>;
-
 interface ScoringFormProps {
   eventCode: string;
   ticket: IssuedTicket;
@@ -110,117 +119,94 @@ function ScoringForm({ eventCode, ticket, scoreOptions, onStale }: ScoringFormPr
   const stored = useMemo(() => parseStudent(storedRaw), [storedRaw]);
   const [codeDraft, setCodeDraft] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [score, setScore] = useState<number | null>(null);
   const studentCode = codeDraft ?? stored?.studentCode ?? "";
   const studentName = nameDraft ?? stored?.studentName ?? "";
 
-  const [score, setScore] = useState<number | null>(null);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [submitted, setSubmitted] = useState<{ score: number; status: "created" | "updated" } | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const codeCheck = useStudentCodeCheck(eventCode, ticket.value, studentCode);
-
-  function handleResult(result: SubmitRatingResult, submittedScore: number) {
-    if (result.success) {
-      // Remember only details the server accepted, for autofill on the next group.
-      saveStudent({ studentCode, studentName });
-      setSubmitted({ score: submittedScore, status: result.data.status });
-      toast.success(result.data.status === "created" ? "Đã gửi điểm." : "Đã cập nhật điểm.");
-      return;
-    }
-    const { code, message, field } = result.error;
-    if (field === "studentCode" || field === "studentName" || field === "score") {
-      setErrors({ [field]: message });
-    } else {
-      toast.error(message);
-    }
-    if (code === "ROUND_CLOSED" || code === "TICKET_INVALID" || code === "TICKET_EXPIRED") onStale();
-  }
-
-  function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isPending) return;
-    if (score === null) {
-      setErrors({ score: "Vui lòng chọn điểm." });
-      return;
-    }
-    const chosen = score;
-    setErrors({});
-    startTransition(async () => {
-      try {
-        const result = await submitRating({
-          eventCode,
-          ticket: ticket.value,
-          studentCode,
-          studentName,
-          score: chosen,
-          deviceId: getOrCreateDeviceId(),
-        });
-        handleResult(result, chosen);
-      } catch {
-        toast.error("Không gửi được. Kiểm tra kết nối mạng rồi thử lại.");
-      }
-    });
-  }
-
+  const { errors, submitted, isPending, submit } = useRatingSubmission(onStale);
+  const codeCheck = useStudentCodeCheck({ eventCode, roundId: ticket.roundId, ticket: ticket.value, studentCode });
   // D4: server-side submit errors win; otherwise show the live roster hint.
   const studentCodeError = errors.studentCode ?? codeCheck.hint;
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit({ eventCode, ticket: ticket.value, studentCode, studentName, score });
+      }}
+      className="flex flex-col gap-5"
+      noValidate
+    >
       {submitted ? (
         <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          Bạn đã {submitted.status === "created" ? "gửi" : "cập nhật"}{" "}
-          <strong>{String(submitted.score).replace(".", ",")} điểm</strong> cho {ticket.groupName}. Gửi lại nếu
-          muốn sửa điểm.
+          Bạn đã {submitted.status === "created" ? "gửi" : "cập nhật"} <strong>{formatScore(submitted.score)} điểm</strong>{" "}
+          cho {ticket.groupName}. Gửi lại nếu muốn sửa điểm.
         </p>
       ) : null}
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="studentCode">Mã sinh viên</Label>
-        <Input
-          id="studentCode"
-          value={studentCode}
-          onChange={(e) => setCodeDraft(e.target.value)}
-          onBlur={codeCheck.checkNow}
-          inputMode="numeric"
-          autoComplete="off"
-          className="h-12 text-lg tabular-nums"
-          aria-invalid={Boolean(studentCodeError)}
-          aria-describedby={studentCodeError ? "studentCode-error" : undefined}
-          disabled={isPending}
-        />
-        <FieldError id="studentCode-error" message={studentCodeError} />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="studentName">Họ và tên</Label>
-        <Input
-          id="studentName"
-          value={studentName}
-          onChange={(e) => setNameDraft(e.target.value)}
-          autoComplete="name"
-          className="h-12 text-lg"
-          aria-invalid={Boolean(errors.studentName)}
-          aria-describedby={errors.studentName ? "studentName-error" : undefined}
-          disabled={isPending}
-        />
-        <FieldError id="studentName-error" message={errors.studentName} />
-      </div>
+      <TextField
+        id="studentCode"
+        label="Mã sinh viên"
+        value={studentCode}
+        onChange={setCodeDraft}
+        onBlur={codeCheck.checkNow}
+        error={studentCodeError}
+        disabled={isPending}
+        inputMode="numeric"
+        autoComplete="off"
+      />
+      <TextField
+        id="studentName"
+        label="Họ và tên"
+        value={studentName}
+        onChange={setNameDraft}
+        error={errors.studentName}
+        disabled={isPending}
+        autoComplete="name"
+      />
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
           <Label>Điểm</Label>
-          <span className="text-2xl font-bold tabular-nums">{score === null ? "—" : String(score).replace(".", ",")}</span>
+          <span className="text-2xl font-bold tabular-nums">{score === null ? "—" : formatScore(score)}</span>
         </div>
-        <ScoreGrid
-          options={scoreOptions}
-          value={score}
-          onChange={setScore}
-          disabled={isPending}
-          describedBy={errors.score ? "score-error" : undefined}
-        />
+        <ScoreGrid options={scoreOptions} value={score} onChange={setScore} disabled={isPending} describedBy={errors.score ? "score-error" : undefined} />
         <FieldError id="score-error" message={errors.score} />
       </div>
       <Button type="submit" size="lg" className="h-14 text-lg" disabled={isPending}>
         {isPending ? "Đang gửi…" : submitted ? "Cập nhật điểm" : "Gửi điểm"}
       </Button>
     </form>
+  );
+}
+
+interface TextFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  error: string | null | undefined;
+  disabled: boolean;
+  inputMode?: "numeric" | "text";
+  autoComplete: string;
+}
+
+function TextField({ id, label, value, onChange, onBlur, error, disabled, inputMode, autoComplete }: TextFieldProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        className="h-12 text-lg tabular-nums"
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
+        disabled={disabled}
+      />
+      <FieldError id={`${id}-error`} message={error} />
+    </div>
   );
 }

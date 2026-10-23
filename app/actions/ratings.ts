@@ -1,6 +1,6 @@
 "use server";
 
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { headers } from "next/headers";
 import { refresh } from "next/cache";
 import { z } from "zod";
@@ -27,7 +27,8 @@ async function requestFingerprint(): Promise<{ ipHash: string; userAgent: string
   const ip = forwarded || requestHeaders.get("x-real-ip") || "unknown";
   return {
     // Raw IPs are never stored (SPEC §9.5).
-    ipHash: createHash("sha256").update(`${ip}${env.TICKET_SECRET}`).digest("hex"),
+    // Domain-separated keyed hash: never reusable as a ticket/QR signature.
+    ipHash: createHmac("sha256", env.TICKET_SECRET).update(`ip:${ip}`).digest("hex"),
     userAgent: requestHeaders.get("user-agent")?.slice(0, USER_AGENT_MAX) ?? null,
   };
 }

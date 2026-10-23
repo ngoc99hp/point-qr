@@ -47,6 +47,8 @@ export interface IssuedTicket {
  * `ticket` is only issued for static-QR events; rotating events require a scan.
  */
 export interface PublicCurrentResponse {
+  /** Server clock (epoch ms) — the student page compares ticket expiry against this, not the phone clock. */
+  serverNow: number;
   event: { title: string; rotatingQr: boolean };
   current: null | { roundId: string; groupName: string; ticket: IssuedTicket | null };
 }

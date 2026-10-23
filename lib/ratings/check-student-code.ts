@@ -26,6 +26,7 @@ export async function checkStudentCodeStatus(input: {
   now?: number;
 }): Promise<StudentCodeStatus> {
   const gate = await passTicketGate({ ...input, kind: "CHECK" });
+  // Invalid and expired tickets both mean "scan again" for the student.
   if (!gate.ok) return gate.failure.error.code === "RATE_LIMITED" ? "RATE_LIMITED" : "TICKET_EXPIRED";
 
   const round = await db.round.findFirst({

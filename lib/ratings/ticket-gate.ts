@@ -35,7 +35,13 @@ export async function passTicketGate(input: {
   const event = await db.event.findUnique({ where: { code: input.eventCode }, select: { id: true } });
   if (!event) return { ok: false, failure: fail("TICKET_INVALID", RESCAN_MESSAGE) };
 
-  if (!(await consumeAttempt(event.id, input.deviceId, input.kind))) {
+  const allowed = await consumeAttempt({
+    eventId: event.id,
+    deviceId: input.deviceId,
+    ticket: input.ticket,
+    kind: input.kind,
+  });
+  if (!allowed) {
     return { ok: false, failure: fail("RATE_LIMITED", RATE_LIMITED_MESSAGE) };
   }
   return { ok: true, roundId: verified.roundId, eventId: event.id };

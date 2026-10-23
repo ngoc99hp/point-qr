@@ -43,6 +43,7 @@ export async function getPublicCurrent(
 
   const open = event.status === "ARCHIVED" ? undefined : event.rounds[0];
   return {
+    serverNow: now,
     event: { title: event.title, rotatingQr: event.rotatingQr },
     current: open
       ? {

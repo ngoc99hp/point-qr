@@ -250,6 +250,21 @@ describe("submitWithTicket (SPEC §9.2, §9.3)", () => {
     });
   });
 
+  it("caps one ticket at 20 submissions per minute even with fresh deviceIds", async () => {
+    const ticket = ticketFor(roundA);
+    const results = [];
+    for (let i = 0; i < 21; i += 1) results.push(await submit({ ticket, deviceId: randomUUID() }));
+    expect(results.slice(0, 20).every((result) => result.success)).toBe(true);
+    expect(results[20]).toMatchObject({ success: false, error: { code: "RATE_LIMITED" } });
+  });
+
+  it("does not let parallel requests from one device exceed the limit (atomic count)", async () => {
+    const deviceId = randomUUID();
+    const results = await Promise.all(Array.from({ length: 15 }, () => submit({ deviceId })));
+    expect(results.filter((result) => result.success)).toHaveLength(10);
+    expect(results.filter((result) => !result.success && result.error.code === "RATE_LIMITED")).toHaveLength(5);
+  });
+
   it("rate limits submissions to 10 per minute per device", async () => {
     const deviceId = randomUUID();
     const results = [];
