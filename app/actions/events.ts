@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { fail, ok, readFormString, type ActionResult } from "@/lib/action-result";
 import { requireLecturer } from "@/lib/auth";
 import { findOwnedEvent } from "@/lib/data/ownership";
@@ -147,4 +148,27 @@ export async function setEventArchived(
   });
   refresh();
   return ok(undefined);
+}
+
+const deleteEventSchema = z.object({ eventId: z.string().min(1).max(64), confirmCode: z.string().trim().min(1).max(16) });
+
+/**
+ * Permanently deletes an event with all groups, students, rounds and ratings
+ * (SPEC §14 P4). The lecturer must type the event code; open rounds must be closed.
+ */
+export async function deleteEvent(eventIdInput: string, confirmCode: string): Promise<ActionResult> {
+  const { lecturerId } = await requireLecturer();
+  const parsed = deleteEventSchema.safeParse({ eventId: eventIdInput, confirmCode });
+  if (!parsed.success) return fail("VALIDATION", "Dữ liệu không hợp lệ.");
+
+  const event = await findOwnedEvent(lecturerId, parsed.data.eventId);
+  if (!event) return fail("NOT_FOUND", NOT_FOUND);
+  if (parsed.data.confirmCode.toUpperCase() !== event.code) {
+    return fail("VALIDATION", "Mã xác nhận không khớp.", "confirmCode");
+  }
+  const openRounds = await db.round.count({ where: { eventId: event.id, status: "OPEN" }, take: 1 });
+  if (openRounds > 0) return fail("ROUND_OPEN", "Hãy đóng phiên chấm đang mở trước khi xóa.");
+
+  await db.event.delete({ where: { id: event.id }, select: { id: true } });
+  redirect("/events");
 }

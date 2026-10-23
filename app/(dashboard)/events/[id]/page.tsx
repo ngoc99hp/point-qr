@@ -9,6 +9,7 @@ import { requireLecturer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { decimalToNumber } from "@/lib/mappers";
 import { ArchiveButton } from "./archive-button";
+import { ClearRosterButton, DeleteEventButton } from "./danger-actions";
 import { GroupManager } from "./group-manager";
 import { RosterImport } from "./roster-import";
 import { SettingsForm } from "./settings-form";
@@ -111,8 +112,13 @@ async function EventSetup({ params }: { params: Promise<{ id: string }> }) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Danh sách lớp</CardTitle>
-            <CardDescription>Nhóm chưa có sẽ được tạo tự động theo cột &quot;Nhóm&quot;.</CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex flex-col gap-1.5">
+                <CardTitle>Danh sách lớp</CardTitle>
+                <CardDescription>Nhóm chưa có sẽ được tạo tự động theo cột &quot;Nhóm&quot;.</CardDescription>
+              </div>
+              <ClearRosterButton eventId={event.id} studentCount={event.students.length} disabled={isArchived || hasOpenRound} />
+            </div>
           </CardHeader>
           <CardContent>
             <RosterImport
@@ -135,6 +141,22 @@ async function EventSetup({ params }: { params: Promise<{ id: string }> }) {
         </CardHeader>
         <CardContent>
           <SettingsForm disabled={isArchived} values={settingsValues(event)} />
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle>Xóa buổi đánh giá</CardTitle>
+          <CardDescription>
+            Xóa vĩnh viễn buổi đánh giá cùng toàn bộ nhóm, danh sách lớp và phiếu chấm. Đóng phiên chấm đang mở trước khi xóa. Nếu chỉ muốn ẩn đi, dùng &quot;Lưu trữ&quot;.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DeleteEventButton
+            eventId={event.id}
+            eventCode={event.code}
+            ratingCount={groups.reduce((sum, group) => sum + group.ratingCount, 0)}
+          />
         </CardContent>
       </Card>
     </div>

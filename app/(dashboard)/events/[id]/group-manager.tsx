@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { addGroup, deleteGroup, moveGroup, renameGroup } from "@/app/actions/roster";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,9 +50,7 @@ export function GroupManager({ eventId, groups, disabled }: GroupManagerProps) {
               isLast={index === groups.length - 1}
               isLocked={isLocked}
               onMove={(direction) => run(() => moveGroup(group.id, direction))}
-              onDelete={() => {
-                if (window.confirm(`Xóa ${group.name}?`)) run(() => deleteGroup(group.id));
-              }}
+              onDelete={() => run(() => deleteGroup(group.id, group.ratingCount > 0))}
               onRename={(name, done) => run(() => renameGroup(group.id, name), done)}
             />
           ))}
@@ -115,15 +114,32 @@ function GroupRow({ group, isFirst, isLast, isLocked, onMove, onDelete, onRename
         <Button size="icon" variant="ghost" disabled={isLocked || isLast} onClick={() => onMove("down")} aria-label={`Đưa ${group.name} xuống`}>
           <ArrowDown aria-hidden />
         </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          disabled={isLocked || group.ratingCount > 0 || group.roundStatus === "OPEN"}
-          onClick={onDelete}
-          aria-label={`Xóa ${group.name}`}
-        >
-          <Trash2 aria-hidden />
-        </Button>
+        <ConfirmDialog
+          title={`Xóa ${group.name}?`}
+          description={
+            <>
+              {group.ratingCount > 0 ? (
+                <span className="font-medium text-destructive">
+                  {group.ratingCount} phiếu chấm của nhóm này sẽ bị xóa vĩnh viễn.
+                </span>
+              ) : null}
+              <span>Sinh viên của nhóm vẫn còn trong danh sách lớp nhưng không thuộc nhóm nào.</span>
+            </>
+          }
+          confirmLabel="Xóa nhóm"
+          onConfirm={onDelete}
+          trigger={
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={isLocked || group.roundStatus === "OPEN"}
+              aria-label={`Xóa ${group.name}`}
+              title={group.roundStatus === "OPEN" ? "Đóng phiên chấm trước khi xóa" : undefined}
+            >
+              <Trash2 aria-hidden />
+            </Button>
+          }
+        />
       </div>
     </li>
   );

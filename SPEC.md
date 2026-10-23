@@ -612,10 +612,10 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 - **Chưa có ticket ở P1:** form SV gửi kèm `roundId` của nhóm đang hiển thị (hidden field) thay cho `ticket`. Server kiểm tra round thuộc đúng event (`eventCode`) và đang `OPEN`. Mục đích là SV đang xem "Nhóm 3" thì không thể vô tình chấm sang "Nhóm 4" khi GV vừa chuyển nhóm. Ở P3 `roundId` được thay bằng `ticket` ký HMAC (§9.2).
 - **QR tĩnh:** event tạo ở P1 có `rotatingQr = false` (đặt khi tạo, giữ default `true` trong schema cho P3). UI chưa có công tắc này. QR trỏ tới `${NEXT_PUBLIC_APP_URL}/r/${code}`. Trang SV polling `GET /api/public/events/[code]/current` mỗi 3 giây để tự chuyển nhóm.
 - **Cấu hình event chỉnh được ở P1:** tiêu đề, `minScore`, `maxScore` (trong [0, 10]), `scoreStep` (0.1 / 0.5 / 1), `studentCodePattern` (regex hợp lệ, ≤ 100 ký tự). Các trường còn lại dùng giá trị mặc định và sẽ mở ở phase dùng đến chúng.
-- **Vòng đời event:** tạo (`ACTIVE`), sửa, lưu trữ (`ARCHIVED`) và khôi phục. Không xóa cứng. Event `ARCHIVED` không mở round được, và phải đóng round đang mở trước khi lưu trữ. `DRAFT` chưa dùng.
+- **Vòng đời event:** tạo (`ACTIVE`), sửa, lưu trữ (`ARCHIVED`) và khôi phục. *(Từ P4 theo T27: có thêm xóa vĩnh viễn.)* Event `ARCHIVED` không mở round được, và phải đóng round đang mở trước khi lưu trữ. `DRAFT` chưa dùng.
 - **Nhóm thủ công:**
   - Thêm nhóm (tên mặc định "Nhóm N", `order = max + 1`), đổi tên, lên/xuống thứ tự (hoán đổi `order` trong transaction).
-  - Xóa nhóm chỉ được khi nhóm **chưa có phiếu** và round không `OPEN`. Ngược lại báo "Không thể xóa nhóm đã có phiếu chấm."
+  - Xóa nhóm: round phải không `OPEN`. *(Đổi ở P4 theo T27:)* Nhóm đã có phiếu vẫn xóa được sau khi GV xác nhận trong dialog có ghi số phiếu sẽ mất. Server yêu cầu cờ `acknowledgeRatings`.
   - Tên nhóm trim, dài 1–50 ký tự, không trùng trong event.
 - **Stats P1** (`lib/stats.ts`): `n`, `mean`, `median`, `highest`, `lowest` theo đúng định nghĩa §8. `trimmedMean`, `stdDev`, `histogram`, `flaggedCount`, `excludedCount` bổ sung ở P2.
 - **Hiển thị trên màn chiếu P1:** tên người chấm cao nhất/thấp nhất luôn hiện (cấu hình `hideRaterNamesOnProjector` làm ở P4).
@@ -745,4 +745,5 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 | T24 | Đổi cấu hình khi đã có phiếu | Khi event **đã có phiếu**, không đổi được `minScore`/`maxScore`/`scoreStep`/`studentCodePattern`, vì phiếu cũ đã được kiểm tra theo quy tắc cũ (BR-04/05). Tên vẫn đổi được. Event `ARCHIVED` không sửa được cấu hình và nhóm (kiểm tra ở server, không chỉ ở UI) |
 | T25 | `studentCodePattern` (chống ReDoS) | Luôn so khớp **toàn bộ** MSV (tự bọc `^(?:…)$`). Khi lưu, từ chối nhóm lặp lồng nhau (`(a+)+`), lookaround và backreference |
 | T26 | Race giữa gửi phiếu và đóng phiên | `submitRating` khóa dòng Round bằng `SELECT … FOR SHARE` trong transaction, nên phiếu không lọt vào sau khi `closeRound`/`openRound` commit |
+| T27 | Xóa nhóm / danh sách lớp / buổi đánh giá (chủ sản phẩm yêu cầu, 23/10/2026) | **Xóa nhóm**: được cả khi đã có phiếu, sau khi xác nhận; phiếu của nhóm bị xóa theo, SV giữ lại nhưng không còn nhóm. **Xóa danh sách lớp** (`clearRoster`): xóa mọi SV của event; nhóm và phiếu giữ nguyên, phiếu mất liên kết roster. **Xóa buổi đánh giá** (`deleteEvent`): xóa vĩnh viễn kèm toàn bộ dữ liệu, phải gõ đúng mã event. Cả ba đều yêu cầu không có round `OPEN` và lọc theo `ownerId` |
 | T23 | Trang public không đọc cookie | Gọi `await connection()` trước khi truy vấn DB (Cache Components), nếu không Next báo lỗi "unstable value" khi prerender |

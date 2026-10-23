@@ -116,7 +116,12 @@ export async function moveGroup(
   return ok(undefined);
 }
 
-export async function deleteGroup(groupIdInput: string): Promise<ActionResult> {
+/**
+ * Deletes a group (its round and ratings cascade). A group with ratings is only
+ * deleted when the caller explicitly acknowledges losing them (SPEC §14 P4).
+ * Its students stay in the roster without a group.
+ */
+export async function deleteGroup(groupIdInput: string, acknowledgeRatings = false): Promise<ActionResult> {
   const { lecturerId } = await requireLecturer();
   const parsed = groupIdSchema.safeParse({ groupId: groupIdInput });
   if (!parsed.success) return fail("VALIDATION", INVALID);
@@ -127,13 +132,30 @@ export async function deleteGroup(groupIdInput: string): Promise<ActionResult> {
   if (group.round?.status === "OPEN") {
     return fail("ROUND_OPEN", "Hãy đóng phiên chấm của nhóm này trước khi xóa.");
   }
-  if ((group.round?._count.ratings ?? 0) > 0) {
-    return fail("HAS_RATINGS", "Không thể xóa nhóm đã có phiếu chấm.");
+  if ((group.round?._count.ratings ?? 0) > 0 && acknowledgeRatings !== true) {
+    return fail("HAS_RATINGS", "Nhóm đã có phiếu chấm. Hãy xác nhận xóa cả phiếu chấm.");
   }
 
   await db.group.delete({ where: { id: group.id }, select: { id: true } });
   refresh();
   return ok(undefined);
+}
+
+/** Removes every student of the event (groups and ratings stay; ratings lose their roster link). */
+export async function clearRoster(eventIdInput: string): Promise<ActionResult<{ deleted: number }>> {
+  const { lecturerId } = await requireLecturer();
+  const parsed = eventIdSchema.safeParse({ eventId: eventIdInput });
+  if (!parsed.success) return fail("VALIDATION", INVALID);
+
+  const event = await findOwnedEvent(lecturerId, parsed.data.eventId);
+  if (!event) return fail("NOT_FOUND", "Không tìm thấy buổi đánh giá.");
+  if (event.status === "ARCHIVED") return fail("EVENT_ARCHIVED", ARCHIVED);
+  const openRounds = await db.round.count({ where: { eventId: event.id, status: "OPEN" }, take: 1 });
+  if (openRounds > 0) return fail("ROUND_OPEN", "Hãy đóng phiên chấm đang mở trước khi xóa danh sách lớp.");
+
+  const { count } = await db.student.deleteMany({ where: { eventId: event.id } });
+  refresh();
+  return ok({ deleted: count });
 }
 
 const importRosterSchema = z.object({
