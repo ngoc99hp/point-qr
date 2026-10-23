@@ -38,6 +38,7 @@ async function loadEvent(lecturerId: string, eventId: string) {
       rankingMetric: true,
       trimRatio: true,
       strictRoster: true,
+      rotatingQr: true,
       students: { select: { code: true } },
       groups: {
         orderBy: { order: "asc" },
@@ -65,6 +66,7 @@ function settingsValues(event: LoadedEvent) {
     rankingMetric: event.rankingMetric,
     trimRatio: decimalToNumber(event.trimRatio),
     strictRoster: event.strictRoster,
+    rotatingQr: event.rotatingQr,
   };
 }
 

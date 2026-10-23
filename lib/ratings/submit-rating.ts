@@ -7,6 +7,7 @@ import { matchesStudentCodePattern } from "@/lib/normalize";
 import { isUniqueViolation } from "@/lib/prisma-errors";
 import { evaluateFlags, evaluateRoster } from "@/lib/rating-rules";
 import { isValidScore } from "@/lib/score";
+import { passTicketGate } from "@/lib/ratings/ticket-gate";
 
 export type SubmitErrorCode =
   | "VALIDATION"
@@ -174,4 +175,21 @@ export async function processRating(input: SaveRatingInput): Promise<SubmitRatin
     }
     return saveRatingOrRejection(input);
   }
+}
+
+export interface TicketRatingInput extends Omit<SaveRatingInput, "roundId"> {
+  ticket: string;
+  /** Injected clock (ms) for tests; defaults to Date.now(). */
+  now?: number;
+}
+
+/**
+ * Public entry point (SPEC §7, P3): verify the ticket (§9.2) and the device rate
+ * limit (§9.3), then process the rating for the ticket's round.
+ */
+export async function submitWithTicket(input: TicketRatingInput): Promise<SubmitRatingResult> {
+  const { ticket, now, ...rating } = input;
+  const gate = await passTicketGate({ eventCode: rating.eventCode, ticket, deviceId: rating.deviceId, kind: "SUBMIT", now });
+  if (!gate.ok) return gate.failure;
+  return processRating({ ...rating, roundId: gate.roundId });
 }

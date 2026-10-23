@@ -2,20 +2,34 @@ import "server-only";
 import { db } from "@/lib/db";
 import { matchesStudentCodePattern } from "@/lib/normalize";
 import { evaluateRoster } from "@/lib/rating-rules";
+import { passTicketGate } from "@/lib/ratings/ticket-gate";
 
-export type StudentCodeStatus = "OK" | "INVALID_FORMAT" | "NOT_IN_ROSTER" | "SELF_RATING" | "ROUND_CLOSED";
+export type StudentCodeStatus =
+  | "OK"
+  | "INVALID_FORMAT"
+  | "NOT_IN_ROSTER"
+  | "SELF_RATING"
+  | "ROUND_CLOSED"
+  | "TICKET_EXPIRED"
+  | "RATE_LIMITED";
 
 /**
- * D4: early feedback while the student types. Returns only a status — never the
- * roster name or group (SPEC §9.5). submitRating re-checks everything.
+ * D4: early feedback while the student types. Requires a valid ticket and is rate
+ * limited per device (P3), so it cannot be used to enumerate the roster from outside
+ * the classroom. Returns only a status — never roster names or groups (SPEC §9.5).
  */
 export async function checkStudentCodeStatus(input: {
   eventCode: string;
-  roundId: string;
+  ticket: string;
+  deviceId: string;
   studentCode: string;
+  now?: number;
 }): Promise<StudentCodeStatus> {
+  const gate = await passTicketGate({ ...input, kind: "CHECK" });
+  if (!gate.ok) return gate.failure.error.code === "RATE_LIMITED" ? "RATE_LIMITED" : "TICKET_EXPIRED";
+
   const round = await db.round.findFirst({
-    where: { id: input.roundId, event: { code: input.eventCode } },
+    where: { id: gate.roundId, eventId: gate.eventId },
     select: {
       status: true,
       groupId: true,

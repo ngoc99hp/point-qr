@@ -52,6 +52,7 @@ export const eventSettingsSchema = z
       .min(0, "Tối thiểu 0.")
       .max(TRIM_RATIO_MAX, `Tối đa ${TRIM_RATIO_MAX}.`),
     strictRoster: z.boolean(),
+    rotatingQr: z.boolean(),
   })
   .refine((value) => value.minScore < value.maxScore, {
     message: "Điểm tối đa phải lớn hơn điểm tối thiểu.",

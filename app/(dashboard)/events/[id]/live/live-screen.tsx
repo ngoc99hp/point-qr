@@ -9,6 +9,7 @@ import type { LiveResponse } from "@/lib/types/live";
 import { LiveSummary, RaterList } from "./live-stats";
 import { QrCode } from "./qr-code";
 import { RoundControls } from "./round-controls";
+import { useQrValue } from "./use-qr-value";
 
 const POLL_OPEN_MS = 2_000;
 const POLL_IDLE_MS = 10_000;
@@ -50,6 +51,13 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
     retry: (failureCount, queryError) => !(queryError instanceof UnauthorizedError) && failureCount < 1,
   });
 
+  const qrValue = useQrValue({
+    eventId,
+    studentUrl,
+    rotatingQr: data?.event.rotatingQr ?? false,
+    openRoundId: data?.current?.roundId ?? null,
+  });
+
   // Session expired (12h): back to login, then return to this screen.
   useEffect(() => {
     if (error instanceof UnauthorizedError) {
@@ -81,8 +89,19 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
 
       <div className="grid gap-8 lg:grid-cols-2">
         <section aria-label="Mã QR" className="flex flex-col items-center gap-3">
-          <QrCode value={studentUrl} label={`Mã QR dẫn tới ${displayUrl}`} />
+          {qrValue ? (
+            <QrCode value={qrValue} label={`Mã QR dẫn tới ${displayUrl}`} />
+          ) : (
+            <div className="flex aspect-square w-full max-w-[min(70vh,100%)] items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              Đang tạo mã QR…
+            </div>
+          )}
           <p className="break-all text-center font-mono text-xl md:text-2xl">{displayUrl}</p>
+          {data.event.rotatingQr ? (
+            <p className="text-center text-sm text-muted-foreground">
+              Mã QR tự đổi mỗi 30 giây — sinh viên cần quét trực tiếp tại lớp.
+            </p>
+          ) : null}
         </section>
         <section aria-label="Thống kê" className="flex flex-col gap-6">
           {data.current ? (

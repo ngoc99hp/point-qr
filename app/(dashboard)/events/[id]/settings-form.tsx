@@ -26,6 +26,7 @@ export interface EventSettingsValues {
   rankingMetric: RankingMetric;
   trimRatio: number;
   strictRoster: boolean;
+  rotatingQr: boolean;
 }
 
 const SELECT_CLASS =
@@ -112,6 +113,15 @@ export function SettingsForm({ values, disabled }: { values: EventSettingsValues
             <span className="font-medium">Chỉ nhận MSV có trong danh sách lớp</span>
             <span className="block text-muted-foreground">
               Bỏ chọn để nhận cả MSV ngoài danh sách (phiếu sẽ được gắn cờ &quot;Ngoài danh sách&quot;).
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 text-sm sm:col-span-2">
+          <input type="checkbox" name="rotatingQr" defaultChecked={values.rotatingQr} className="mt-0.5 size-4" />
+          <span>
+            <span className="font-medium">QR xoay vòng (buộc quét tại lớp)</span>
+            <span className="block text-muted-foreground">
+              Mã QR đổi mỗi 30 giây; sinh viên phải quét lại cho từng nhóm. Bỏ chọn để dùng một mã QR cố định cho cả buổi.
             </span>
           </span>
         </label>

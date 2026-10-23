@@ -34,8 +34,24 @@ export interface LiveResponse {
   };
 }
 
-/** GET /api/public/events/[code]/current — never includes roster or ratings (SPEC §9.5). */
+/** A signed ticket for one round (SPEC §9.2); expiresAt is epoch ms. */
+export interface IssuedTicket {
+  value: string;
+  roundId: string;
+  groupName: string;
+  expiresAt: number;
+}
+
+/**
+ * GET /api/public/events/[code]/current — never includes roster or ratings (SPEC §9.5).
+ * `ticket` is only issued for static-QR events; rotating events require a scan.
+ */
 export interface PublicCurrentResponse {
-  event: { title: string };
-  current: null | { roundId: string; groupName: string };
+  event: { title: string; rotatingQr: boolean };
+  current: null | { roundId: string; groupName: string; ticket: IssuedTicket | null };
+}
+
+/** GET /api/events/[id]/qr-token — null when no round is open. */
+export interface QrTokenResponse {
+  token: string | null;
 }

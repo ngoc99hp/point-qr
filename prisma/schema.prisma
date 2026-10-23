@@ -47,6 +47,7 @@ model Event {
   groups                    Group[]
   students                  Student[]
   rounds                    Round[]
+  submitAttempts            SubmitAttempt[]
 
   @@index([ownerId])
 }
@@ -131,4 +132,17 @@ model Rating {
   @@unique([roundId, studentCode]) // one rating per student per group → upsert
   @@index([roundId, excluded])
   @@index([roundId, deviceId])
+}
+
+// P3 (SPEC §9.3): lightweight per-device rate limit log; rows older than 1 hour are pruned.
+model SubmitAttempt {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  deviceId  String
+  kind      String // "SUBMIT" | "CHECK"
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([eventId, deviceId, kind, createdAt])
+  @@index([eventId, createdAt])
 }

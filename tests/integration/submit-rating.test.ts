@@ -2,8 +2,15 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { MANUAL_INCLUDE } from "@/lib/rating-rules";
+import { env } from "@/lib/env";
 import { checkStudentCodeStatus } from "@/lib/ratings/check-student-code";
-import { processRating, type SaveRatingInput } from "@/lib/ratings/submit-rating";
+import {
+  processRating,
+  submitWithTicket,
+  type SaveRatingInput,
+  type TicketRatingInput,
+} from "@/lib/ratings/submit-rating";
+import { TICKET_TTL_SECONDS, issueTicket } from "@/lib/ticket";
 
 // Runs against the main Neon DB (SPEC §13, D11). All data hangs off a throwaway
 // Lecturer, so deleting it in afterAll cascades to every row this file created.
@@ -180,14 +187,74 @@ describe("submitRating against the database", () => {
   });
 });
 
-describe("checkStudentCodeStatus (D4)", () => {
-  const check = (studentCode: string, roundId = roundA) => checkStudentCodeStatus({ eventCode, roundId, studentCode });
+describe("checkStudentCodeStatus (D4, ticket-gated in P3)", () => {
+  const check = (studentCode: string, ticket = issueTicket(roundA, env.TICKET_SECRET, Date.now())) =>
+    checkStudentCodeStatus({ eventCode, ticket, deviceId: randomUUID(), studentCode });
 
   it("reports each roster status without exposing roster data", async () => {
     expect(await check(STUDENT_B1.code)).toBe("OK");
     expect(await check(UNKNOWN_CODE)).toBe("NOT_IN_ROSTER");
     expect(await check(STUDENT_IN_A.code)).toBe("SELF_RATING");
     expect(await check("ABC")).toBe("INVALID_FORMAT");
-    expect(await check(STUDENT_B1.code, "no-such-round")).toBe("ROUND_CLOSED");
+    expect(await check(STUDENT_B1.code, issueTicket("no-such-round", env.TICKET_SECRET, Date.now()))).toBe("ROUND_CLOSED");
+  });
+
+  it("refuses without a valid ticket (no roster oracle from outside the class)", async () => {
+    expect(await check(STUDENT_B1.code, "forged.ticket")).toBe("TICKET_EXPIRED");
+  });
+
+  it("rate limits checks to 30 per minute per device", async () => {
+    const deviceId = randomUUID();
+    const ticket = issueTicket(roundA, env.TICKET_SECRET, Date.now());
+    const statuses = [];
+    for (let i = 0; i < 31; i += 1) {
+      statuses.push(await checkStudentCodeStatus({ eventCode, ticket, deviceId, studentCode: STUDENT_B1.code }));
+    }
+    expect(statuses.slice(0, 30).every((status) => status === "OK")).toBe(true);
+    expect(statuses[30]).toBe("RATE_LIMITED");
+  });
+});
+
+describe("submitWithTicket (SPEC §9.2, §9.3)", () => {
+  const ticketFor = (roundId: string, now = Date.now()) => issueTicket(roundId, env.TICKET_SECRET, now);
+  const submit = (overrides: Partial<TicketRatingInput>) =>
+    submitWithTicket({
+      eventCode,
+      ticket: ticketFor(roundA),
+      studentCode: STUDENT_B1.code,
+      studentName: STUDENT_B1.name,
+      score: 8,
+      deviceId: randomUUID(),
+      ipHash: "test",
+      userAgent: "vitest",
+      ...overrides,
+    });
+
+  it("accepts a valid ticket", async () => {
+    expect(await submit({})).toMatchObject({ success: true, data: { status: "created" } });
+  });
+
+  it("rejects an expired ticket (older than 15 minutes)", async () => {
+    const issuedAt = Date.now() - (TICKET_TTL_SECONDS + 1) * 1000;
+    expect(await submit({ ticket: ticketFor(roundA, issuedAt) })).toMatchObject({
+      success: false,
+      error: { code: "TICKET_EXPIRED" },
+    });
+  });
+
+  it("rejects a forged ticket and a ticket for a round of another event", async () => {
+    expect(await submit({ ticket: "eyJyIjoiYSJ9.forged" })).toMatchObject({ success: false, error: { code: "TICKET_INVALID" } });
+    expect(await submit({ ticket: ticketFor("round-of-another-event") })).toMatchObject({
+      success: false,
+      error: { code: "TICKET_INVALID" },
+    });
+  });
+
+  it("rate limits submissions to 10 per minute per device", async () => {
+    const deviceId = randomUUID();
+    const results = [];
+    for (let i = 0; i < 11; i += 1) results.push(await submit({ deviceId, score: 5 + (i % 2) }));
+    expect(results.slice(0, 10).every((result) => result.success)).toBe(true);
+    expect(results[10]).toMatchObject({ success: false, error: { code: "RATE_LIMITED" } });
   });
 });

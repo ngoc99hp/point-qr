@@ -39,8 +39,8 @@ export async function createEvent(
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS && !eventId; attempt += 1) {
     try {
       const event = await db.event.create({
-        // P1 uses a static QR (SPEC §14 P1); rotating QR arrives in P3.
-        data: { ownerId: lecturerId, title: parsed.data.title, code: generateEventCode(), rotatingQr: false },
+        // rotatingQr uses the schema default (true since P3, SPEC §14 P3).
+        data: { ownerId: lecturerId, title: parsed.data.title, code: generateEventCode() },
         select: { id: true },
       });
       eventId = event.id;
@@ -91,6 +91,7 @@ export async function updateEventSettings(
     rankingMetric: readFormString(formData, "rankingMetric"),
     trimRatio: readFormString(formData, "trimRatio"),
     strictRoster: formData.get("strictRoster") === "on",
+    rotatingQr: formData.get("rotatingQr") === "on",
   });
   if (!parsed.success) return firstIssue(parsed.error);
 

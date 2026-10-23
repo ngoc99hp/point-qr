@@ -12,8 +12,8 @@ import { parseEventCode } from "@/lib/event-code";
 import { normalizeCode } from "@/lib/normalize";
 import { MANUAL_INCLUDE } from "@/lib/rating-rules";
 import { checkStudentCodeStatus, type StudentCodeStatus } from "@/lib/ratings/check-student-code";
-import { processRating, type SubmitRatingResult } from "@/lib/ratings/submit-rating";
-import { submitRatingSchema, type SubmitRatingInput } from "@/lib/validations/rating";
+import { submitWithTicket, type SubmitRatingResult } from "@/lib/ratings/submit-rating";
+import { submitRatingSchema, ticketSchema, type SubmitRatingInput } from "@/lib/validations/rating";
 
 export type { SubmitErrorCode, SubmitRatingResult } from "@/lib/ratings/submit-rating";
 export type { StudentCodeStatus } from "@/lib/ratings/check-student-code";
@@ -32,7 +32,7 @@ async function requestFingerprint(): Promise<{ ipHash: string; userAgent: string
   };
 }
 
-/** PUBLIC. Validates input, then delegates to processRating (lib/ratings). */
+/** PUBLIC. Validates input, then delegates to submitWithTicket (ticket, rate limit, rules). */
 export async function submitRating(input: SubmitRatingInput): Promise<SubmitRatingResult> {
   const parsed = submitRatingSchema.safeParse(input);
   if (!parsed.success) {
@@ -42,7 +42,7 @@ export async function submitRating(input: SubmitRatingInput): Promise<SubmitRati
   const eventCode = parseEventCode(parsed.data.eventCode);
   if (!eventCode) return fail("TICKET_INVALID", INVALID_EVENT);
 
-  return processRating({
+  return submitWithTicket({
     ...parsed.data,
     eventCode,
     studentCode: normalizeCode(parsed.data.studentCode),
@@ -52,7 +52,8 @@ export async function submitRating(input: SubmitRatingInput): Promise<SubmitRati
 
 const checkStudentCodeSchema = z.object({
   eventCode: z.string().trim().min(1).max(16),
-  roundId: z.string().trim().min(1).max(64),
+  ticket: ticketSchema,
+  deviceId: z.uuid(),
   studentCode: z.string().trim().min(1).max(32),
 });
 
@@ -66,7 +67,8 @@ export async function checkStudentCode(
 
   const status = await checkStudentCodeStatus({
     eventCode,
-    roundId: parsed.data.roundId,
+    ticket: parsed.data.ticket,
+    deviceId: parsed.data.deviceId,
     studentCode: normalizeCode(parsed.data.studentCode),
   });
   return ok({ status });
