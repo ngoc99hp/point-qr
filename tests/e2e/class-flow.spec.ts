@@ -47,7 +47,11 @@ test.afterAll(async () => {
     pathToFileURL(join(process.cwd(), "node_modules/@neondatabase/serverless/index.mjs")).href
   )) as typeof import("@neondatabase/serverless");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  await pool.query(`DELETE FROM "Event" WHERE title = $1`, [TITLE]);
+  // Scoped to the admin's own [TEST] event with this run's unique title.
+  await pool.query(
+    `DELETE FROM "Event" WHERE title = $1 AND "ownerId" = (SELECT id FROM "Lecturer" WHERE email = $2)`,
+    [TITLE, (process.env.ADMIN_EMAIL ?? "").toLowerCase()],
+  );
   await pool.end();
 });
 
@@ -76,15 +80,18 @@ test("a full class session from setup to CSV export", async ({ page, browser }) 
   await page.getByRole("button", { name: "Mở chấm Nhóm 1" }).click();
   await expect(page.getByText("Đang chấm: Nhóm 1")).toBeVisible();
 
-  // Students scan the rotating QR (token fetched the same way the projector does).
-  const { token } = (await (await page.request.get(`/api/events/${eventId}/qr-token`)).json()) as { token: string };
-  const studentUrl = `/r/${code}?t=${token}`;
+  // Each student scans a fresh rotating QR (fetched the same way the projector does),
+  // so a slow run cannot outlive the 30–60 s token window.
+  const studentUrl = async () => {
+    const { token } = (await (await page.request.get(`/api/events/${eventId}/qr-token`)).json()) as { token: string };
+    return `/r/${code}?t=${token}`;
+  };
 
-  const binh = await rateAsStudent(browser, studentUrl, { code: "2210000002", name: "Nguyễn Văn Bình", score: "8" });
+  const binh = await rateAsStudent(browser, await studentUrl(), { code: "2210000002", name: "Nguyễn Văn Bình", score: "8" });
   await expect(binh.page.getByText("Đã gửi điểm.")).toBeVisible();
-  const cuc = await rateAsStudent(browser, studentUrl, { code: "2210000003", name: "tran thi cuc", score: "9" });
+  const cuc = await rateAsStudent(browser, await studentUrl(), { code: "2210000003", name: "tran thi cuc", score: "9" });
   await expect(cuc.page.getByText("Đã gửi điểm.")).toBeVisible();
-  const ngoc = await rateAsStudent(browser, studentUrl, { code: "2210000001", name: "Đào Anh Ngọc", score: "10" });
+  const ngoc = await rateAsStudent(browser, await studentUrl(), { code: "2210000001", name: "Đào Anh Ngọc", score: "10" });
   await expect(ngoc.page.getByText("Bạn không thể chấm nhóm của mình.").first()).toBeVisible();
   await Promise.all([binh.close(), cuc.close(), ngoc.close()]);
 

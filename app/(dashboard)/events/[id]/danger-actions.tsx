@@ -27,7 +27,7 @@ export function ClearRosterButton({ eventId, studentCount, disabled }: ClearRost
         </>
       }
       confirmLabel="Xóa danh sách"
-      onConfirm={() => run(() => clearRoster(eventId), ({ deleted }) => toast.success(`Đã xóa ${deleted} sinh viên.`))}
+      onConfirm={() => run(() => clearRoster(eventId, true), ({ deleted }) => toast.success(`Đã xóa ${deleted} sinh viên.`))}
       trigger={
         <Button variant="outline" size="sm" disabled={disabled || isPending || studentCount === 0}>
           <Trash2 aria-hidden /> Xóa danh sách lớp

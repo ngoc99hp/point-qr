@@ -695,6 +695,9 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
   - `object-src 'none'`; `base-uri 'self'`; `form-action 'self'`; `frame-ancestors 'none'`
   - Kèm HSTS. Không dùng `upgrade-insecure-requests`, vì nó làm hỏng `next start` trên http://localhost.
 - **Ticket mang `eventId` đã ký** (`e` trong payload). Gate không còn tra event theo code. Ticket của event đã bị xóa trả `TICKET_INVALID`.
+- **Ticket có `jti` ngẫu nhiên** (`j`, 9 byte), nên mỗi lần phát ra một ticket khác nhau. Trước đó, các ticket phát trong cùng một giây giống hệt nhau, khiến cả lớp dùng chung một bucket rate limit theo ticket và bị chặn nhầm (lỗi do review P4 phát hiện).
+- **Thêm trần theo event:** 600 submit và 1500 check mỗi phút. Trần này đếm không khóa (xấp xỉ) để không gây tranh chấp giữa các SV, nhằm chặn kiểu tấn công dùng ticket mới kèm `deviceId` mới liên tục.
+- `clearRoster` yêu cầu cờ `acknowledgeRatings` ở server khi event đã có phiếu, giống `deleteGroup`.
 - **Trang SV nhẹ:**
   - Dùng `<label>`/`<button>` thuần và thông báo inline (`aria-live`), không dùng radix và sonner.
   - `<Toaster>` chỉ nằm ở layout dashboard.

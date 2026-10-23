@@ -70,7 +70,7 @@ describe("ticket (SPEC §9.2)", () => {
     expect(verifyTicket(ticket, OTHER_SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
 
     const [, signature] = ticket.split(".");
-    const forgedPayload = Buffer.from(JSON.stringify({ r: "otherround", e: EVENT, iat: T0 / 1000, exp: T0 / 1000 + 900 })).toString("base64url");
+    const forgedPayload = Buffer.from(JSON.stringify({ r: "otherround", e: EVENT, j: "x", iat: T0 / 1000, exp: T0 / 1000 + 900 })).toString("base64url");
     expect(verifyTicket(`${forgedPayload}.${signature}`, SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
   });
 
@@ -86,6 +86,14 @@ describe("ticket (SPEC §9.2)", () => {
     // Correctly signed, so only the missing `e` makes it invalid.
     const signature = createHmac("sha256", SECRET).update(`ticket:${legacy}`).digest("base64url");
     expect(verifyTicket(`${legacy}.${signature}`, SECRET, T0)).toEqual({ ok: false, reason: "INVALID" });
+  });
+
+  it("issues a unique ticket each time, even within the same second (per-ticket rate limits)", () => {
+    const tickets = new Set(
+      Array.from({ length: 50 }, () => issueTicket({ roundId: ROUND, eventId: EVENT }, SECRET, T0)),
+    );
+    expect(tickets.size).toBe(50);
+    for (const ticket of tickets) expect(verifyTicket(ticket, SECRET, T0)).toMatchObject({ ok: true });
   });
 
   it("rejects malformed tickets", () => {

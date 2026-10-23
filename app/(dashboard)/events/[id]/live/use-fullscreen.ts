@@ -22,9 +22,10 @@ export function useFullscreen(ref: RefObject<HTMLElement | null>) {
 
   const toggle = useCallback(() => {
     if (document.fullscreenElement) {
-      void document.exitFullscreen();
+      // Rejections (e.g. denied by the browser) are not actionable; ignore them.
+      document.exitFullscreen().catch(() => undefined);
     } else {
-      void ref.current?.requestFullscreen();
+      ref.current?.requestFullscreen().catch(() => undefined);
     }
   }, [ref]);
 

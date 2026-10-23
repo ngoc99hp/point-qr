@@ -1,6 +1,6 @@
 // Pure QR token + ticket signing (SPEC §9.1, §9.2). `secret` and `now` (ms) are
 // parameters so the logic is unit-testable; callers pass env.TICKET_SECRET and Date.now().
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const QR_WINDOW_SECONDS = 30;
 export const TICKET_TTL_SECONDS = 15 * 60;
@@ -54,9 +54,13 @@ interface TicketPayload {
   r: string;
   /** eventId — binds the ticket to its event and spares a lookup by code. */
   e: string;
+  /** Random id: tickets issued in the same second must not share a rate-limit bucket. */
+  j: string;
   iat: number;
   exp: number;
 }
+
+const TICKET_ID_BYTES = 9;
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 
@@ -66,6 +70,8 @@ function isTicketPayload(value: unknown): value is TicketPayload {
     value !== null &&
     "r" in value &&
     "e" in value &&
+    "j" in value &&
+    isNonEmptyString(value.j) &&
     "iat" in value &&
     "exp" in value &&
     isNonEmptyString(value.r) &&
@@ -78,7 +84,13 @@ function isTicketPayload(value: unknown): value is TicketPayload {
 /** ticket = base64url(JSON{ r, e, iat, exp }) + "." + base64url(HMAC) — valid 15 minutes. */
 export function issueTicket(round: { roundId: string; eventId: string }, secret: string, now: number): string {
   const iat = Math.floor(now / 1000);
-  const payload: TicketPayload = { r: round.roundId, e: round.eventId, iat, exp: iat + TICKET_TTL_SECONDS };
+  const payload: TicketPayload = {
+    r: round.roundId,
+    e: round.eventId,
+    j: randomBytes(TICKET_ID_BYTES).toString("base64url"),
+    iat,
+    exp: iat + TICKET_TTL_SECONDS,
+  };
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   return `${encoded}.${hmac(secret, "ticket", encoded)}`;
 }

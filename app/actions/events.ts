@@ -1,6 +1,6 @@
 "use server";
 
-import { refresh, revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { fail, ok, readFormString, type ActionResult } from "@/lib/action-result";
@@ -170,7 +170,7 @@ export async function deleteEvent(eventIdInput: string, confirmCode: string): Pr
   if (openRounds > 0) return fail("ROUND_OPEN", "Hãy đóng phiên chấm đang mở trước khi xóa.");
 
   await db.event.delete({ where: { id: event.id }, select: { id: true } });
-  // The client shows a toast, navigates to /events and refreshes (DeleteEventButton).
-  revalidatePath("/events");
+  // The client shows a toast, navigates to /events and refreshes (DeleteEventButton);
+  // revalidating here would re-render the now-deleted page first.
   return ok(undefined);
 }

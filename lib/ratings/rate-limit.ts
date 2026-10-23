@@ -14,10 +14,22 @@ export const RATE_LIMIT_PER_DEVICE: Record<AttemptKind, number> = { SUBMIT: 10, 
  * Each scan (rotating) or poll (static) yields a distinct ticket, so this only caps abuse.
  */
 export const RATE_LIMIT_PER_TICKET: Record<AttemptKind, number> = { SUBMIT: 20, CHECK: 60 };
+/**
+ * Coarse per-event ceiling against fresh-ticket + fresh-deviceId floods. Far above a
+ * real class (≈ 80 students × a few attempts per minute). Counted without a lock,
+ * so it is approximate and adds no contention between students.
+ */
+export const RATE_LIMIT_PER_EVENT: Record<AttemptKind, number> = { SUBMIT: 600, CHECK: 1500 };
+const EVENT_SUBJECT = "event";
 
 const WINDOW_MS = 60_000;
 const RETENTION_MS = 60 * 60_000;
 const PRUNE_PROBABILITY = 1 / 50;
+/**
+ * Requests from one device queue on its advisory lock by design; allow that queue
+ * more than Prisma's 5 s default before the transaction is aborted.
+ */
+const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 15_000 } as const;
 
 /** Ticket strings are long and sensitive; store only a short hash as the subject. */
 const ticketSubject = (ticket: string) => `t:${createHash("sha256").update(ticket).digest("base64url").slice(0, 22)}`;
@@ -41,14 +53,18 @@ export async function consumeAttempt(input: {
   now?: Date;
 }): Promise<boolean> {
   const now = input.now ?? new Date();
-  const buckets: Bucket[] = [
+  // Locked (exact) buckets: ticket, then device — always in this order.
+  const locked: Bucket[] = [
     { subject: ticketSubject(input.ticket), kind: `${input.kind}_TICKET`, limit: RATE_LIMIT_PER_TICKET[input.kind] },
     { subject: input.deviceId, kind: input.kind, limit: RATE_LIMIT_PER_DEVICE[input.kind] },
   ];
-  const [ticketKey, deviceKey] = buckets.map((bucket) => `${input.eventId}:${bucket.kind}:${bucket.subject}`);
+  const eventBucket: Bucket = { subject: EVENT_SUBJECT, kind: `${input.kind}_EVENT`, limit: RATE_LIMIT_PER_EVENT[input.kind] };
+  const buckets = [...locked, eventBucket];
+  const [ticketKey, deviceKey] = locked.map((bucket) => `${input.eventId}:${bucket.kind}:${bucket.subject}`);
 
   const allowed = await db.$transaction(async (tx) => {
     // pg_advisory_xact_lock returns void, which Prisma cannot deserialize; select a constant.
+    // Postgres evaluates the select list left to right, so the lock order is fixed.
     await tx.$queryRaw`SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtext(${ticketKey})), pg_advisory_xact_lock(hashtext(${deviceKey}))) AS locks`;
     const counts = await tx.submitAttempt.groupBy({
       by: ["deviceId", "kind"],
@@ -67,7 +83,7 @@ export async function consumeAttempt(input: {
       data: buckets.map((bucket) => ({ eventId: input.eventId, deviceId: bucket.subject, kind: bucket.kind, createdAt: now })),
     });
     return true;
-  });
+  }, TRANSACTION_OPTIONS);
 
   if (Math.random() < PRUNE_PROBABILITY) {
     await db.submitAttempt.deleteMany({

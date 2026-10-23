@@ -142,7 +142,10 @@ export async function deleteGroup(groupIdInput: string, acknowledgeRatings = fal
 }
 
 /** Removes every student of the event (groups and ratings stay; ratings lose their roster link). */
-export async function clearRoster(eventIdInput: string): Promise<ActionResult<{ deleted: number }>> {
+export async function clearRoster(
+  eventIdInput: string,
+  acknowledgeRatings = false,
+): Promise<ActionResult<{ deleted: number }>> {
   const { lecturerId } = await requireLecturer();
   const parsed = eventIdSchema.safeParse({ eventId: eventIdInput });
   if (!parsed.success) return fail("VALIDATION", INVALID);
@@ -152,6 +155,11 @@ export async function clearRoster(eventIdInput: string): Promise<ActionResult<{ 
   if (event.status === "ARCHIVED") return fail("EVENT_ARCHIVED", ARCHIVED);
   const openRounds = await db.round.count({ where: { eventId: event.id, status: "OPEN" }, take: 1 });
   if (openRounds > 0) return fail("ROUND_OPEN", "Hãy đóng phiên chấm đang mở trước khi xóa danh sách lớp.");
+  // Existing ratings lose their roster link (studentId → null); require an explicit OK.
+  const ratings = await db.rating.count({ where: { round: { eventId: event.id } }, take: 1 });
+  if (ratings > 0 && acknowledgeRatings !== true) {
+    return fail("HAS_RATINGS", "Buổi đánh giá đã có phiếu chấm. Hãy xác nhận xóa danh sách lớp.");
+  }
 
   const { count } = await db.student.deleteMany({ where: { eventId: event.id } });
   refresh();
