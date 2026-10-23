@@ -39,7 +39,7 @@
 
 | Vai trò | Xác thực | Quyền |
 |---|---|---|
-| Giảng viên (Lecturer) | Google OAuth + allowlist email | CRUD buổi đánh giá của mình, điều khiển phiên, xem và xuất kết quả |
+| Giảng viên / Admin (Lecturer) | **Một tài khoản admin duy nhất** (email + mật khẩu cấu hình qua env, §9.5) | CRUD buổi đánh giá của mình, điều khiển phiên, xem và xuất kết quả |
 | Sinh viên (Rater) | Không đăng nhập; cần ticket hợp lệ từ QR | Gửi hoặc sửa phiếu chấm khi phiên đang mở |
 
 **Luồng trong lớp:**
@@ -63,7 +63,7 @@
 | Lint | ESLint (flat config) + `eslint-config-next` | ESLint 9.x, `eslint-config-next` cùng version với `next` | |
 | DB | Neon Postgres | | Region **aws-ap-southeast-1 (Singapore)** |
 | ORM | Prisma + `@prisma/adapter-neon` + `@neondatabase/serverless` | `prisma`, `@prisma/client`, `@prisma/adapter-neon` **7.10.x**; `@neondatabase/serverless` 1.x | Driver adapter đã GA nên **không dùng `previewFeatures`**. Dùng `PrismaNeon` (WebSocket Pool) để hỗ trợ interactive transaction, **không dùng** `PrismaNeonHttp`. Cấu hình chi tiết ở §4.1 |
-| Auth | Auth.js v5 (`next-auth`), Google provider, JWT session | **`5.0.0-beta.32`** (pin chính xác, v5 chưa có bản stable) | Allowlist qua env `ALLOWED_LECTURER_EMAILS`. Không dùng `@auth/prisma-adapter` |
+| Auth | Auth.js v5 (`next-auth`), **Credentials provider** (1 tài khoản admin), JWT session | **`5.0.0-beta.32`** (pin chính xác, v5 chưa có bản stable) | Tài khoản qua env `ADMIN_EMAIL` + `ADMIN_PASSWORD`. Không dùng OAuth, không dùng `@auth/prisma-adapter` |
 | UI | Tailwind v4 + shadcn/ui | `tailwindcss` 4.x, CLI `shadcn` 4.x | Kèm `next-themes` (component Sonner của shadcn cần, và dùng cho dark mode ở P4) |
 | Client state | TanStack Query v5 | 5.x | Chỉ dùng cho polling dashboard và trạng thái phiên phía SV (từ P1) |
 | Validation | Zod + react-hook-form | `zod` 4.x, `react-hook-form` 7.x, `@hookform/resolvers` 5.x+ | |
@@ -110,8 +110,9 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: { path: "prisma/migrations" },
   // Dùng process.env thay vì env(): env() throw khi thiếu biến, làm hỏng `prisma generate`
-  // (postinstall, build Vercel) ở môi trường không có DIRECT_URL. Lệnh migrate vẫn báo lỗi nếu thiếu.
-  datasource: { url: process.env.DIRECT_URL },
+  // (postinstall, build Vercel) ở môi trường không có DB URL. Lệnh migrate vẫn báo lỗi nếu thiếu.
+  // DIRECT_URL là tùy chọn: nếu không có thì suy ra từ DATABASE_URL bằng cách bỏ "-pooler" khỏi host.
+  datasource: { url: resolveDirectUrl(process.env) },
 });
 ```
 
@@ -476,13 +477,14 @@ Không có đăng nhập SV thì **không thể ngăn hoàn toàn việc chấm 
 - Endpoint public không bao giờ trả roster hay danh sách phiếu. Chỉ trả tên event và tên nhóm đang mở.
 - Lưu `ipHash`, không lưu IP thô.
 - Server Actions đã có kiểm tra Origin của Next. Không tắt cơ chế này.
-- Auth.js `signIn` callback: từ chối email ngoài `ALLOWED_LECTURER_EMAILS`. Lần đăng nhập đầu tiên thì upsert `Lecturer`. Chi tiết:
-  - So khớp email sau khi `trim()` và `toLowerCase()` cả hai phía. Chỉ khớp chính xác email, không khớp theo domain.
-  - Bắt buộc `profile.email_verified === true` từ Google.
-  - Bị từ chối thì chuyển về `/login?error=AccessDenied` và hiện "Email này không có quyền truy cập. Liên hệ quản trị viên để được cấp quyền."
-  - Upsert `Lecturer` theo `email` trong callback `jwt` (khi có `user`, tức lúc đăng nhập). Tạo mới nếu chưa có; nếu đã có thì **cập nhật `name`** theo Google. Gán `token.lecturerId = lecturer.id`.
+- **Đăng nhập admin** (Auth.js Credentials provider, thay cho Google OAuth từ sau P0):
+  - Chỉ có **một tài khoản** được cấu hình qua env `ADMIN_EMAIL` và `ADMIN_PASSWORD`. Không có trang đăng ký, không có đổi mật khẩu trong app; muốn đổi thì sửa env rồi deploy lại.
+  - Form `/login` gồm Email và Mật khẩu, được validate bằng Zod. Email so khớp sau khi `trim()` + `toLowerCase()`. Mật khẩu so khớp bằng `crypto.timingSafeEqual` trên digest SHA-256 của cả hai phía (không phụ thuộc độ dài, chống timing attack).
+  - Sai thông tin thì hiện "Email hoặc mật khẩu không đúng." **Không** tiết lộ trường nào sai.
+  - `ADMIN_PASSWORD` dài **≥ 16 ký tự**. Đây là biện pháp chống brute force ở v1, vì không có rate limit cho form đăng nhập (không dùng Redis).
+  - Lúc đăng nhập thành công (trong `authorize`), upsert `Lecturer` theo `ADMIN_EMAIL` (name mặc định "Admin") rồi gán `token.lecturerId = lecturer.id`. Mọi event thuộc `Lecturer` này.
   - Callback `session` đưa `session.user.lecturerId`. Type được mở rộng trong `types/next-auth.d.ts` (module `next-auth` và `next-auth/jwt`), không cast `any`.
-  - JWT session có `maxAge` 12 giờ. `requireLecturer()` (lib/auth.ts) **kiểm tra lại allowlist mỗi lần truy cập**, nên email bị gỡ khỏi allowlist sẽ mất quyền ngay ở lần truy cập tiếp theo (sau khi env được cập nhật và deploy lại).
+  - JWT session có `maxAge` 12 giờ. `requireLecturer()` (lib/auth.ts) **kiểm tra lại email session === `ADMIN_EMAIL` mỗi lần truy cập**, nên đổi `ADMIN_EMAIL` sẽ thu hồi session cũ ngay.
   - Proxy chỉ là kiểm tra lạc quan. **Mọi page, Server Action và route handler phía GV đều phải gọi `requireLecturer()`**; không được dựa vào proxy hay layout.
   - Header bảo mật cơ bản được đặt trong `next.config.ts`: chống nhúng iframe, `nosniff`, `Referrer-Policy`, `Permissions-Policy`. CSP đầy đủ để sau.
 
@@ -505,11 +507,10 @@ Không có đăng nhập SV thì **không thể ngăn hoàn toàn việc chấm 
 
 ```
 DATABASE_URL=postgresql://...-pooler.ap-southeast-1.aws.neon.tech/db?sslmode=require
-DIRECT_URL=postgresql://....ap-southeast-1.aws.neon.tech/db?sslmode=require
+# DIRECT_URL=postgresql://....ap-southeast-1.aws.neon.tech/db?sslmode=require   # tùy chọn
 AUTH_SECRET=
-AUTH_GOOGLE_ID=
-AUTH_GOOGLE_SECRET=
-ALLOWED_LECTURER_EMAILS=a@hpu.edu.vn,b@hpu.edu.vn
+ADMIN_EMAIL=admin@hpu.edu.vn
+ADMIN_PASSWORD=           # ≥ 16 ký tự
 TICKET_SECRET=            # ≥ 32 bytes random
 NEXT_PUBLIC_APP_URL=https://<domain>
 ```
@@ -518,7 +519,8 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 
 **Quy ước `lib/env.ts`:**
 - Export hàm thuần `parseEnv(raw: Record<string, string | undefined>)` để unit test được, và hằng `env` đã parse từ `process.env`. Thiếu biến hoặc sai biến thì throw lỗi liệt kê **tên** biến sai, không in giá trị.
-- Quy tắc: `DATABASE_URL`, `DIRECT_URL` và `NEXT_PUBLIC_APP_URL` phải là URL hợp lệ. `AUTH_SECRET` và `TICKET_SECRET` dài ≥ 32 ký tự. `AUTH_GOOGLE_ID` và `AUTH_GOOGLE_SECRET` không rỗng. `ALLOWED_LECTURER_EMAILS` được tách theo dấu phẩy, trim, lowercase, bỏ phần tử rỗng, phải có ≥ 1 email hợp lệ, và parse ra `string[]`.
+- Quy tắc: `DATABASE_URL` và `NEXT_PUBLIC_APP_URL` phải là URL hợp lệ. `AUTH_SECRET` và `TICKET_SECRET` dài ≥ 32 ký tự. `ADMIN_EMAIL` là email hợp lệ (được trim + lowercase). `ADMIN_PASSWORD` dài ≥ 16 ký tự.
+- **`DIRECT_URL` là tùy chọn.** Console Neon chỉ hiện một connection string, có nút bật/tắt *Connection pooling*. URL direct chính là URL pooled bỏ `-pooler` khỏi host (ví dụ `ep-abc-pooler.ap-southeast-1…` → `ep-abc.ap-southeast-1…`). Nếu không khai báo `DIRECT_URL`, `prisma.config.ts` tự suy ra theo cách này (hàm thuần `resolveDirectUrl` trong `lib/neon-url.ts`, có unit test). Runtime không dùng `DIRECT_URL`.
 - `TICKET_SECRET` bắt buộc ngay từ P0 (dùng cho `ipHash` và ticket ở các phase sau).
 - Thời điểm validate: ở `instrumentation.ts` (lúc server khởi động) và lần đầu import `env` phía server. **Không** validate trong `next.config.ts`, để `next build` không đòi secret thật.
 - Chỉ import `lib/env.ts` phía server (`import "server-only"`). Client chỉ dùng trực tiếp `process.env.NEXT_PUBLIC_APP_URL`.
@@ -552,12 +554,12 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 - Prisma 7 + Neon adapter theo §4.1. Schema **chỉ có model `Lecturer`** (không có relation `events`), cùng migration đầu tiên `init`:
   - Có `DIRECT_URL` thật: chạy `prisma migrate dev --name init`.
   - Chưa có DB: sinh SQL offline bằng `prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script` vào `prisma/migrations/<timestamp>_init/migration.sql`, kèm `migration_lock.toml`.
-- Auth.js Google kèm allowlist (§9.5), `lib/env.ts` (§11), `proxy.ts` (§6), `instrumentation.ts`.
-- Trang `/login` (nút "Đăng nhập bằng Google", hiện lỗi AccessDenied) và trang `/events` placeholder (hiện email GV, nút "Đăng xuất").
+- Auth.js (ban đầu là Google kèm allowlist, đã đổi sang tài khoản admin theo T16), `lib/env.ts` (§11), `proxy.ts` (§6), `instrumentation.ts`.
+- Trang `/login` (form Email + Mật khẩu) và trang `/events` placeholder (hiện email GV, nút "Đăng xuất").
 - `vercel.json`, scripts (§10), `README.md`, `CLAUDE.md`.
 - Test P0: chỉ bắt buộc unit test cho `lib/env.ts`. Cuối phase chạy `pnpm typecheck && pnpm lint && pnpm test && pnpm build`. Nếu chưa có env thật thì build bằng `.env.local` giá trị giả (gitignored).
-- Deploy lên Vercel, cấu hình Google OAuth và điền env thật do **chủ sản phẩm làm thủ công** theo README. Claude Code không deploy.
-- **Nghiệm thu (chủ sản phẩm kiểm):** đăng nhập được bằng email trong allowlist, email ngoài bị từ chối, `pnpm db:deploy` chạy được trên Neon.
+- Deploy lên Vercel và điền env thật do **chủ sản phẩm làm thủ công** theo README. Claude Code không deploy.
+- **Nghiệm thu (chủ sản phẩm kiểm):** đăng nhập được bằng tài khoản admin, sai mật khẩu bị từ chối, `pnpm db:deploy` chạy được trên Neon.
 
 ### P1: MVP dùng được trên lớp
 - Schema đầy đủ §4 kèm migration SQL bổ sung.
@@ -567,6 +569,20 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 - Trang live: QR, điều khiển, stats cơ bản (n, mean, median, highest, lowest), polling.
 - `lib/stats.ts` kèm unit test.
 - **Nghiệm thu:** Chạy thử end-to-end trên 2 điện thoại thật. Gửi lại thì cập nhật điểm. Mở nhóm mới thì nhóm cũ tự đóng.
+
+**Làm rõ phạm vi P1** (đã chốt, xem thêm §17):
+- **Chưa có roster ở P1:** bỏ qua BR-07/08/09/10. Phiếu được nhận chỉ cần qua BR-04/05/06, với `studentId = null`, `flags = []`, `excluded = false`. Tuy `strictRoster` mặc định là `true`, P1 **không** áp dụng nó; từ P2 mới áp dụng.
+- **Chưa có ticket ở P1:** form SV gửi kèm `roundId` của nhóm đang hiển thị (hidden field) thay cho `ticket`. Server kiểm tra round thuộc đúng event (`eventCode`) và đang `OPEN`. Mục đích là SV đang xem "Nhóm 3" thì không thể vô tình chấm sang "Nhóm 4" khi GV vừa chuyển nhóm. Ở P3 `roundId` được thay bằng `ticket` ký HMAC (§9.2).
+- **QR tĩnh:** event tạo ở P1 có `rotatingQr = false` (đặt khi tạo, giữ default `true` trong schema cho P3). UI chưa có công tắc này. QR trỏ tới `${NEXT_PUBLIC_APP_URL}/r/${code}`. Trang SV polling `GET /api/public/events/[code]/current` mỗi 3 giây để tự chuyển nhóm.
+- **Cấu hình event chỉnh được ở P1:** tiêu đề, `minScore`, `maxScore` (trong [0, 10]), `scoreStep` (0.1 / 0.5 / 1), `studentCodePattern` (regex hợp lệ, ≤ 100 ký tự). Các trường còn lại dùng giá trị mặc định và sẽ mở ở phase dùng đến chúng.
+- **Vòng đời event:** tạo (`ACTIVE`), sửa, lưu trữ (`ARCHIVED`) và khôi phục. Không xóa cứng. Event `ARCHIVED` không mở round được, và phải đóng round đang mở trước khi lưu trữ. `DRAFT` chưa dùng.
+- **Nhóm thủ công:**
+  - Thêm nhóm (tên mặc định "Nhóm N", `order = max + 1`), đổi tên, lên/xuống thứ tự (hoán đổi `order` trong transaction).
+  - Xóa nhóm chỉ được khi nhóm **chưa có phiếu** và round không `OPEN`. Ngược lại báo "Không thể xóa nhóm đã có phiếu chấm."
+  - Tên nhóm trim, dài 1–50 ký tự, không trùng trong event.
+- **Stats P1** (`lib/stats.ts`): `n`, `mean`, `median`, `highest`, `lowest` theo đúng định nghĩa §8. `trimmedMean`, `stdDev`, `histogram`, `flaggedCount`, `excludedCount` bổ sung ở P2.
+- **Hiển thị trên màn chiếu P1:** tên người chấm cao nhất/thấp nhất luôn hiện (cấu hình `hideRaterNamesOnProjector` làm ở P4).
+- **Kiểm thử P1:** unit test (viết trước) cho `stats`, `normalize` (`normalizeCode`), validate điểm theo step, sinh mã event, `neon-url`, xác thực admin. Integration test với DB để ở P2 (§13).
 
 ### P2: Roster & kiểm soát chất lượng phiếu
 - Import roster (TSV/CSV kèm preview); BR-07, 08, 09, 10; flags.
@@ -626,5 +642,10 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 | T11 | Upsert Lecturer | Tạo nếu chưa có, cập nhật `name` mỗi lần đăng nhập (§9.5) |
 | T12 | Module format | `"type": "module"` |
 | T13 | Migration khi chưa có DB | Sinh offline bằng `prisma migrate diff` (§14 P0) |
-| T14 | Deploy Vercel và OAuth ở P0 | Chủ sản phẩm làm thủ công theo README |
+| T14 | Deploy Vercel ở P0 | Chủ sản phẩm làm thủ công theo README |
 | T15 | Git | `git init`, commit khởi tạo trực tiếp lên `main` |
+| T16 | Google OAuth (P0) | **Bỏ** theo quyết định của chủ sản phẩm (23/10/2026). Thay bằng 1 tài khoản admin qua Credentials provider (§9.5). Bỏ env `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_LECTURER_EMAILS`; thêm `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
+| T17 | `DIRECT_URL` không có trên console Neon | Biến tùy chọn, tự suy ra từ `DATABASE_URL` (§11) |
+| T18 | P1 chưa có ticket/roster | Dùng `roundId` thay ticket; bỏ qua BR-07..10 (§14 P1) |
+| T19 | Thư viện form ở P1 | Form dùng Server Action + `useActionState`, lỗi theo từng trường do server trả về. `react-hook-form` chỉ thêm khi form cần validate phía client phức tạp (P2 import roster) |
+| T20 | `cn` | Dùng package `cn` do shadcn CLI cài (của shadcn-ui, thay cho `clsx` + `tailwind-merge`) |
