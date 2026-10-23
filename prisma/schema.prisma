@@ -8,10 +8,127 @@ datasource db {
   provider = "postgresql"
 }
 
-// P0: only Lecturer. The `events` relation is added in P1 (SPEC §4.2).
 model Lecturer {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
   createdAt DateTime @default(now()) @db.Timestamptz(3)
+  events    Event[]
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Event {
+  id                        String        @id @default(cuid())
+  ownerId                   String
+  owner                     Lecturer      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title                     String
+  code                      String        @unique // 6 chars [A-Z2-9], used in the QR URL
+  status                    EventStatus   @default(ACTIVE)
+
+  // Scoring configuration
+  minScore                  Decimal       @default(0) @db.Decimal(3, 1)
+  maxScore                  Decimal       @default(10) @db.Decimal(3, 1)
+  scoreStep                 Decimal       @default(0.5) @db.Decimal(2, 1)
+  trimRatio                 Decimal       @default(0.1) @db.Decimal(3, 2)
+  rankingMetric             RankingMetric @default(TRIMMED_MEAN)
+  studentCodePattern        String        @default("^[A-Z0-9]{5,15}$") // applied after normalize
+  strictRoster              Boolean       @default(true)
+  rotatingQr                Boolean       @default(true)
+  hideRaterNamesOnProjector Boolean       @default(false)
+
+  createdAt                 DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime      @updatedAt @db.Timestamptz(3)
+
+  groups                    Group[]
+  students                  Student[]
+  rounds                    Round[]
+
+  @@index([ownerId])
+}
+
+enum RankingMetric {
+  MEAN
+  TRIMMED_MEAN
+  MEDIAN
+}
+
+model Group {
+  id       String    @id @default(cuid())
+  eventId  String
+  event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name     String
+  order    Int
+  students Student[]
+  round    Round?
+
+  @@unique([eventId, name])
+  @@unique([eventId, order])
+}
+
+model Student {
+  id       String   @id @default(cuid())
+  eventId  String
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  code     String // normalized student code (trim + uppercase)
+  fullName String
+  groupId  String?
+  group    Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  ratings  Rating[]
+
+  @@unique([eventId, code])
+}
+
+enum RoundStatus {
+  OPEN
+  CLOSED
+}
+
+// Exactly one round per group; reopening sets status back to OPEN.
+model Round {
+  id       String      @id @default(cuid())
+  eventId  String
+  event    Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  groupId  String      @unique
+  group    Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  status   RoundStatus @default(OPEN)
+  openedAt DateTime    @default(now()) @db.Timestamptz(3)
+  closedAt DateTime?   @db.Timestamptz(3)
+  ratings  Rating[]
+
+  @@index([eventId, status])
+}
+
+enum RatingFlag {
+  UNKNOWN_STUDENT // student code not in roster (only when strictRoster=false)
+  NAME_MISMATCH // entered name differs from roster name
+  DEVICE_MULTI_STUDENT // same deviceId already rated for another student in this round
+}
+
+model Rating {
+  id          String       @id @default(cuid())
+  roundId     String
+  round       Round        @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  studentCode String // normalized
+  studentName String // as entered by the student
+  studentId   String? // roster match, if any
+  student     Student?     @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  score       Decimal      @db.Decimal(3, 1)
+  flags       RatingFlag[] @default([])
+  excluded    Boolean      @default(false) // excluded from statistics
+  excludedBy  String? // "AUTO" | lecturerId
+  deviceId    String // client UUID (localStorage)
+  ipHash      String // sha256(ip + TICKET_SECRET); raw IP is never stored
+  userAgent   String?
+  editCount   Int          @default(0)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@unique([roundId, studentCode]) // one rating per student per group → upsert
+  @@index([roundId, excluded])
+  @@index([roundId, deviceId])
 }
