@@ -355,7 +355,13 @@ Chưa đăng nhập: trang thì redirect về `/login?callbackUrl=…`, còn `/a
 
 ### 6.1 `/r/[code]`: form SV (mobile-first)
 - Header: tên event và **"Đang chấm: Nhóm X"** (chữ lớn).
-- Trường nhập: MSV (`inputMode="text"`, `autoCapitalize="characters"`), Họ tên, Điểm.
+- Trường nhập: MSV (`inputMode="numeric"` vì MSV HPU chỉ gồm chữ số, D1), Họ tên, Điểm.
+- **Kiểm tra MSV ngay khi nhập (D4):** khi SV nhập xong MSV (blur, hoặc dừng gõ 500 ms), trang gọi `checkStudentCode` và hiện ngay dưới ô MSV một trong các thông báo:
+  - "MSV không đúng định dạng."
+  - "MSV không có trong danh sách lớp. Kiểm tra lại hoặc báo giảng viên."
+  - "Bạn không thể chấm nhóm của mình." (MSV thuộc nhóm đang được chấm)
+  - Hợp lệ: không hiện gì.
+  Endpoint chỉ trả **trạng thái**, không trả tên hay nhóm của SV (§9.5). Server vẫn kiểm tra lại đầy đủ khi gửi phiếu.
 - Ô nhập điểm: **dãy nút chọn nhanh** theo `scoreStep` (0, 0.5, …, 10) dạng lưới, kèm hiển thị giá trị đã chọn. Không dùng slider vì khó chọn chính xác trên điện thoại.
 - Lưu MSV và Họ tên vào `localStorage` để tự điền cho các nhóm sau.
 - Sinh `deviceId` (UUID v4) lưu ở `localStorage` lần đầu.
@@ -363,10 +369,13 @@ Chưa đăng nhập: trang thì redirect về `/login?callbackUrl=…`, còn `/a
 - Nút gửi bị disable khi đang submit (chống double-submit). Yêu cầu: hiển thị tốt trên màn hình 360px và tải nhẹ (không nhúng thư viện nặng).
 
 ### 6.2 `/events/[id]/live`: màn chiếu
-- Bố cục 2 cột (≥1024px): **trái** là QR lớn (≥ 40vh) kèm URL rút gọn bên dưới; **phải** là stats.
+- **Bố cục (D3, chủ sản phẩm chốt 23/10/2026)**, 2 cột từ 1024px:
+  - **Trái:** QR lớn (≥ 40vh), URL rút gọn bên dưới.
+  - **Phải, phía trên:** **Điểm trung bình** (chữ rất lớn), kèm số phiếu hợp lệ và số phiếu bị loại.
+  - **Phải, phía dưới:** **bảng danh sách SV đã chấm**, sắp **điểm cao → thấp**; cùng điểm thì ai gửi trước đứng trước. Cột: STT, MSV, Họ tên, Điểm, Cờ (badge). Chỉ liệt kê phiếu hợp lệ (`excluded=false`); bảng tự cuộn khi dài.
+- **Không** hiện thẻ cao nhất/thấp nhất, trung vị, độ lệch chuẩn hay histogram trên màn chiếu (D6). Các số liệu này nằm ở trang results.
 - Thanh điều khiển: danh sách nhóm dạng nút (trạng thái: chưa chấm / đang mở / đã đóng kèm số phiếu), nút **Mở chấm**, **Đóng**, **Nhóm tiếp →**.
-- Khối stats: số phiếu (font rất lớn), Trung bình, Trung bình cắt, Trung vị, Độ lệch chuẩn, **Cao nhất** (điểm và tên người chấm; nếu đồng điểm thì hiện "và N người khác"), **Thấp nhất** (tương tự), histogram 11 cột (0–10), số phiếu bị cờ hoặc bị loại.
-- `hideRaterNamesOnProjector=true` thì ẩn tên, chỉ hiện điểm.
+- `hideRaterNamesOnProjector`: **không dùng** (D6), vì GV cần nhìn danh sách.
 - Polling `GET /api/events/[id]/live` mỗi **2 giây** khi có round OPEN, **10 giây** khi không có. Dừng polling khi tab ẩn (`refetchIntervalInBackground: false`).
 - QR xoay vòng: fetch `qr-token` mỗi 20 giây, render lại QR client-side.
 - Có nút toàn màn hình. Hỗ trợ dark mode (máy chiếu thường dễ đọc hơn với nền tối).
@@ -380,7 +389,14 @@ Chưa đăng nhập: trang thì redirect về `/login?callbackUrl=…`, còn `/a
 ### 6.4 `/events/[id]`: setup
 - Form cấu hình event (các trường ở §4).
 - Import roster: **dán trực tiếp từ Excel (TSV)** hoặc upload CSV. Cột bắt buộc là `MSV`, `Họ tên`, `Nhóm`. Hiển thị preview kèm lỗi theo từng dòng (MSV sai định dạng, MSV trùng) trước khi xác nhận. Nhóm chưa tồn tại thì tự tạo, `order` lấy theo số trong tên nhóm nếu có.
-- Chế độ import: **thay thế toàn bộ** hoặc **bổ sung**. Không cho thay thế khi event đã có phiếu (hiện cảnh báo).
+  - Tên cột so khớp không phân biệt hoa thường và dấu (`MSV`/`Mã SV`/`Mã sinh viên`; `Họ tên`/`Họ và tên`; `Nhóm`). Dòng đầu tiên là dòng tiêu đề. Dấu phân tách tự nhận: tab, `;` hoặc `,` (CSV hỗ trợ ô trong ngoặc kép). Bỏ BOM và dòng trống.
+  - Nếu `order` lấy từ tên nhóm bị trùng với nhóm đã có, nhóm mới được xếp cuối.
+  - Có lỗi ở bất kỳ dòng nào thì **không cho xác nhận**. Server parse và kiểm tra lại toàn bộ.
+- Chế độ import: **thay thế toàn bộ** hoặc **bổ sung**. Không cho thay thế khi event đã có phiếu hoặc có round OPEN (hiện cảnh báo).
+  - **Thay thế:** xóa toàn bộ SV và nhóm hiện có rồi tạo lại.
+  - **Bổ sung:** thêm SV mới. MSV đã có thì **cập nhật** tên và nhóm. Preview hiện số dòng "thêm mới" và "cập nhật".
+- Hiện số SV của từng nhóm. Nếu event chưa có SV nào và `strictRoster=true`, hiện cảnh báo "Chưa có danh sách lớp — sinh viên sẽ không gửi được phiếu."
+- Cấu hình bổ sung ở P2: `strictRoster` (công tắc), `rankingMetric`, `trimRatio`. Hai trường `rankingMetric` và `trimRatio` chỉ ảnh hưởng hiển thị nên đổi được bất cứ lúc nào.
 - Quản lý nhóm thủ công: thêm, đổi tên, sắp xếp lại.
 
 ---
@@ -420,18 +436,33 @@ Thứ tự xử lý `submitRating` (đặt **trong một transaction** từ bư�
 type LiveResponse = {
   event: { id: string; title: string; code: string; rotatingQr: boolean };
   groups: { id: string; name: string; order: number; roundStatus: "NONE" | "OPEN" | "CLOSED"; validCount: number }[];
-  current: null | { roundId: string; groupId: string; groupName: string; openedAt: string; stats: GroupStats };
+  current: null | {
+    roundId: string; groupId: string; groupName: string; openedAt: string; stats: GroupStats;
+    // P2 (D3): phiếu hợp lệ, đã sắp điểm giảm dần rồi createdAt tăng dần
+    ratings: { studentCode: string; studentName: string; score: number; flags: RatingFlag[] }[];
+  };
 };
+
+// actions/ratings.ts — PUBLIC (P2, D4): kiểm tra MSV trước khi gửi
+checkStudentCode(input: { eventCode: string; roundId: string; studentCode: string }): Promise<
+  { success: true; data: { status: "OK" | "INVALID_FORMAT" | "NOT_IN_ROSTER" | "SELF_RATING" | "ROUND_CLOSED" } }
+  | { success: false; error: { code: "VALIDATION"; message: string } }
+>;
 ```
 
 ---
 
 ## 8. Thống kê (`lib/stats.ts`: hàm thuần)
 
-Số phiếu mỗi nhóm nhỏ (≤ 200), nên **tính trong TypeScript** thay vì SQL phức tạp: dễ test và dễ đổi công thức. Query chỉ lấy các field cần dùng của phiếu `excluded=false`.
+Số phiếu mỗi nhóm nhỏ (≤ 200), nên **tính trong TypeScript** thay vì SQL phức tạp: dễ test và dễ đổi công thức. Query chỉ lấy các field cần dùng.
+
+Đầu vào gồm **mọi phiếu của round** (kể cả phiếu bị loại). Mọi chỉ số điểm (`n`, `mean`, …, `histogram`) chỉ tính trên phiếu `excluded=false`. `excludedCount` đếm số phiếu bị loại; `flaggedCount` đếm phiếu có ít nhất 1 cờ, tính cả phiếu đã bị loại.
 
 ```ts
-type RatingInput = { score: number; studentCode: string; studentName: string; createdAt: Date };
+type RatingInput = {
+  score: number; studentCode: string; studentName: string; createdAt: Date;
+  excluded: boolean; flags: RatingFlag[];
+};
 
 type GroupStats = {
   n: number;
@@ -544,7 +575,10 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 ## 13. Kiểm thử
 
 - **Unit (Vitest):** `stats.ts`, `normalize.ts` (bao gồm "Đào Anh Ngọc" và "dao anh ngoc" phải khớp nhau), `ticket.ts` (hợp lệ, hết hạn, sai chữ ký, sai round), validate điểm theo step.
-- **Integration:** `submitRating` với DB test (Neon branch hoặc Postgres local qua Docker) cho các trường hợp BR-03, 06, 07, 08, 10.
+- **Integration:** `submitRating` cho các trường hợp BR-03, 06, 07, 08, 09, 10. Theo quyết định của chủ sản phẩm, test chạy **trực tiếp trên DB Neon chính** (`DATABASE_URL` trong `.env.local`):
+  - Mỗi lần chạy tạo event test riêng (title bắt đầu bằng `[TEST]`) và **xóa sạch** trong `afterAll`; xóa event thì cascade xóa nhóm, SV, round và phiếu.
+  - Lệnh riêng `pnpm test:integration`. `pnpm test` chỉ chạy unit test, không cần DB.
+  - Không bao giờ sửa hay xóa dữ liệu không do test tạo ra.
 - **E2E (Playwright):** GV đăng nhập (mock), tạo event, import roster, mở Nhóm 1, 3 SV gửi phiếu (1 phiếu tự chấm bị từ chối), dashboard hiển thị n=2, đóng phiên, export CSV.
 - **Load (script k6 hoặc autocannon):** 100 submit trong 20 giây vào một round. Yêu cầu: không lỗi 5xx, p95 < 800ms.
 
@@ -593,12 +627,26 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 - Stats đầy đủ: trimmed mean, std, histogram, đếm phiếu cờ/loại.
 - **Nghiệm thu:** Toàn bộ test integration ở §13 pass. File CSV mở đúng tiếng Việt trong Excel.
 
+**Làm rõ phạm vi P2** (chủ sản phẩm chốt 23/10/2026):
+- **D1:** MSV HPU chỉ gồm chữ số. `studentCodePattern` mặc định `^[0-9]{5,15}$` cho event mới (migration đổi default). GV chỉnh độ dài chính xác trong cấu hình. Ô MSV dùng bàn phím số.
+- **D3:** màn chiếu theo §6.2 mới (QR | trung bình + danh sách SV đã chấm). Xếp hạng ở trang results mặc định theo **trung bình** (`rankingMetric = MEAN` cho event mới), GV đổi được.
+- **D4:** từ chối MSV ngoài roster (`strictRoster = true`) và báo ngay khi nhập MSV (`checkStudentCode`, §6.1). Quy trình chuẩn: tạo buổi → import danh sách lớp kèm nhóm → mở màn chiếu.
+- **D5:** phiếu `DEVICE_MULTI_STUDENT` tự loại.
+- **Tính lại cờ khi SV gửi lại (BR-06):** cờ được tính lại từ đầu. `excluded = (GV đã loại thủ công) || DEVICE_MULTI_STUDENT`. Phiếu bị GV loại thủ công (`excludedBy = lecturerId`) vẫn bị loại khi SV gửi lại; phiếu bị loại tự động (`AUTO`) được khôi phục nếu không còn cờ `DEVICE_MULTI_STUDENT`.
+- **BR-10:** chỉ xét các phiếu **khác MSV** trong cùng round có cùng `deviceId`. Phiếu đầu tiên của thiết bị không bị ảnh hưởng; chỉ phiếu đến sau bị gắn cờ và tự loại.
+- **Thứ tự kiểm tra `submitRating` ở P2:** BR-03 → BR-04 → BR-05 → BR-08 (`NOT_IN_ROSTER`) → BR-07 (`SELF_RATING`) → BR-09 (cờ) → BR-10 (cờ + loại) → upsert.
+- **Loại/khôi phục thủ công** (`setRatingExcluded`): GV đặt `excluded` và `excludedBy = lecturerId` (hoặc `null` khi khôi phục). Lọc theo `ownerId`.
+- **Export CSV:**
+  - Summary: Hạng, Nhóm, Số phiếu, TB, TB cắt, Trung vị, Độ lệch chuẩn, Min, Max, Số phiếu bị loại.
+  - Raw: Nhóm, MSV, Tên nhập, Tên roster, Điểm, Cờ, Bị loại, Thời gian (giờ Việt Nam), Số lần sửa.
+  - Số dùng dấu chấm thập phân. Ô bắt đầu bằng `= + - @` được thêm tiền tố `'` để chống CSV injection.
+
 ### P3: Chống gian lận nâng cao
 - QR xoay vòng và ticket (§9.1, 9.2), rate limit theo device (§9.3).
 - **Nghiệm thu:** Token cũ hơn 60 giây bị từ chối, ticket không dùng được cho round khác, unit test `ticket.ts` pass.
 
 ### P4: Hoàn thiện
-- Dark mode, toàn màn hình, `hideRaterNamesOnProjector`, tối ưu UI màn chiếu.
+- Dark mode, toàn màn hình, tối ưu UI màn chiếu (bỏ `hideRaterNamesOnProjector` theo D6), CSP đầy đủ.
 - E2E Playwright và load test.
 - **Nghiệm thu:** Load test đạt chỉ tiêu §13. Lighthouse mobile cho `/r/[code]` ≥ 90 Performance.
 
@@ -614,18 +662,19 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 
 ## 16. Quyết định mở (chủ sản phẩm chốt)
 
-| # | Câu hỏi | Mặc định đang dùng |
+| # | Câu hỏi | Quyết định (✅ = chủ sản phẩm đã chốt 23/10/2026) |
 |---|---|---|
-| D1 | Định dạng MSV của HPU (regex chính xác)? | `^[A-Z0-9]{5,15}$` |
+| D1 | Định dạng MSV của HPU (regex chính xác)? | ✅ Chỉ chữ số: `^[0-9]{5,15}$` (độ dài chỉnh trong cấu hình event) |
 | D2 | Bước điểm: 1 / 0.5 / 0.1? | 0.5 |
-| D3 | Chỉ số xếp hạng chính: TB hay TB cắt hay trung vị? Tỷ lệ cắt? | TB cắt 10% |
-| D4 | MSV ngoài roster: từ chối hay nhận kèm cờ? | Từ chối (`strictRoster=true`) |
-| D5 | Phiếu `DEVICE_MULTI_STUDENT`: tự loại hay chỉ gắn cờ? | Tự loại |
-| D6 | Có hiển thị tên người chấm cao/thấp nhất trên màn chiếu không? | Có (tắt được bằng cấu hình) |
+| D3 | Chỉ số xếp hạng chính: TB hay TB cắt hay trung vị? Tỷ lệ cắt? | ✅ Màn chiếu hiện **điểm trung bình** + danh sách SV đã chấm (cao → thấp). Xếp hạng mặc định theo **TB**, đổi được theo event |
+| D4 | MSV ngoài roster: từ chối hay nhận kèm cờ? | ✅ Từ chối, và **báo ngay khi SV nhập MSV** |
+| D5 | Phiếu `DEVICE_MULTI_STUDENT`: tự loại hay chỉ gắn cờ? | ✅ Tự loại |
+| D6 | Có hiển thị tên người chấm cao/thấp nhất trên màn chiếu không? | ✅ Không cần; GV xem bảng danh sách (D3) |
 | D7 | SV có được sửa điểm khi phiên còn mở không? | Có (upsert) |
 | D8 | Có cần nhiều GV cùng quản lý một event không? | Không (chỉ owner) |
 | D9 | Điểm SV chấm dùng thế nào: hiển thị tham khảo hay quy đổi vào điểm thành phần? Nếu quy đổi thì cần thêm công thức kết hợp với điểm GV. | Chỉ tham khảo |
-| D10 | Có cần rate limit cho form đăng nhập admin không (bảng đếm lần sai trong Neon, hoặc Vercel WAF)? | Chưa có. Chỉ dựa vào mật khẩu ≥ 16 ký tự ngẫu nhiên |
+| D10 | Có cần rate limit cho form đăng nhập admin không (bảng đếm lần sai trong Neon, hoặc Vercel WAF)? | ✅ Không, vì chỉ một người dùng. Dựa vào mật khẩu ≥ 16 ký tự ngẫu nhiên |
+| D11 | Integration test chạy trên DB nào? | ✅ Trực tiếp trên Neon chính, tự dọn dữ liệu test (§13) |
 
 ---
 
