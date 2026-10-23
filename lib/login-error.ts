@@ -1,8 +1,6 @@
 const LOGIN_ERROR_MESSAGES = new Map<string, string>([
-  [
-    "AccessDenied",
-    "Email này không có quyền truy cập. Liên hệ quản trị viên để được cấp quyền.",
-  ],
+  ["AccessDenied", "Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại."],
+  ["CredentialsSignin", "Email hoặc mật khẩu không đúng."],
 ]);
 
 const FALLBACK_LOGIN_ERROR = "Đăng nhập thất bại. Vui lòng thử lại.";

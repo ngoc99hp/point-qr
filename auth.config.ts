@@ -1,15 +1,15 @@
 import type { NextAuthConfig } from "next-auth";
-import Google from "next-auth/providers/google";
 
-/** Lecturers re-authenticate after 12 hours (one teaching day). */
+/** The admin re-authenticates after 12 hours (one teaching day). */
 const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
 
 /**
  * Edge-safe Auth.js config shared by proxy.ts and lib/auth.ts.
- * Must not import Prisma, lib/env or any server-only module.
+ * Must not import Prisma, lib/env or any server-only module. The Credentials
+ * provider lives in lib/auth.ts; the proxy only needs to decode the JWT.
  */
 export const authConfig = {
-  providers: [Google],
+  providers: [],
   session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   pages: { signIn: "/login", error: "/login" },
   callbacks: {

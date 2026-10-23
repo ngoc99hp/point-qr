@@ -7,14 +7,14 @@ PeerScore cho sinh viên chấm điểm phần thuyết trình của nhóm bạn
 - Next.js 16 (App Router, Cache Components), TypeScript 5.9 strict
 - Tailwind v4 và shadcn/ui
 - Prisma 7 với `@prisma/adapter-neon`, chạy trên Neon Postgres (Singapore)
-- Auth.js v5 (Google, JWT)
+- Auth.js v5 (1 tài khoản admin, JWT)
 - Vitest; deploy lên Vercel (`sin1`)
 
 ## Yêu cầu
 
 - Node.js ≥ 22 (khuyến nghị bản LTS 22 hoặc 24)
 - pnpm (phiên bản ghi trong `packageManager` của `package.json`; bật bằng `corepack enable`)
-- Một project trên Neon và một OAuth client của Google
+- Một project trên Neon
 
 ## Cài đặt local
 
@@ -34,24 +34,19 @@ Next.js và `prisma.config.ts` đều đọc `.env.local`. Không commit file n�
 | Biến | Mô tả |
 |---|---|
 | `DATABASE_URL` | Connection string **pooled** của Neon (host có `-pooler`). Ứng dụng dùng lúc runtime |
-| `DIRECT_URL` | Connection string **direct** của Neon (host không có `-pooler`). Prisma CLI dùng để migrate |
+| `DIRECT_URL` | *Tùy chọn.* Connection string **direct** (host không có `-pooler`) cho Prisma CLI. Bỏ trống thì tự suy ra từ `DATABASE_URL` |
 | `AUTH_SECRET` | ≥ 32 ký tự ngẫu nhiên: `npx auth secret` hoặc `openssl rand -base64 32` |
-| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Lấy từ Google OAuth client |
-| `ALLOWED_LECTURER_EMAILS` | Danh sách email giảng viên được phép đăng nhập, phân tách bằng dấu phẩy, không phân biệt hoa thường |
+| `ADMIN_EMAIL` | Email của tài khoản admin duy nhất |
+| `ADMIN_PASSWORD` | Mật khẩu admin, **≥ 16 ký tự** (ví dụ `openssl rand -base64 24`) |
 | `TICKET_SECRET` | ≥ 32 ký tự ngẫu nhiên: `openssl rand -base64 48` |
 | `NEXT_PUBLIC_APP_URL` | URL gốc của ứng dụng, ví dụ `http://localhost:3000` hoặc `https://<domain>` |
 | `AUTH_TRUST_HOST` | *Tùy chọn.* Đặt `true` khi chạy `pnpm start` ở local hoặc tự host ngoài Vercel |
 
-Lấy connection string trên Neon: **Dashboard → Connect**, chọn region `aws-ap-southeast-1`. Bật **Connection pooling** để lấy `DATABASE_URL`, tắt đi để lấy `DIRECT_URL`.
+Lấy connection string trên Neon: **Dashboard → Connect**, chọn region `aws-ap-southeast-1`, bật **Connection pooling** rồi chép vào `DATABASE_URL`. Không cần khai báo `DIRECT_URL`: URL direct chính là URL đó bỏ `-pooler` khỏi host, và [prisma.config.ts](prisma.config.ts) tự suy ra.
 
-## Google OAuth
+## Tài khoản admin
 
-1. Vào Google Cloud Console → **APIs & Services → OAuth consent screen**. Chọn loại *Internal* nếu dùng Google Workspace của trường, nếu không thì chọn *External*.
-2. Vào **Credentials → Create credentials → OAuth client ID**, chọn loại *Web application*.
-3. Điền **Authorized redirect URIs**:
-   - `http://localhost:3000/api/auth/callback/google`
-   - `https://<domain-production>/api/auth/callback/google`
-4. Chép Client ID và Client secret vào `AUTH_GOOGLE_ID` và `AUTH_GOOGLE_SECRET`.
+Ứng dụng chỉ có **một tài khoản** quản trị, khai báo bằng `ADMIN_EMAIL` và `ADMIN_PASSWORD`. Lần đăng nhập đầu tiên sẽ tạo bản ghi `Lecturer` tương ứng. Muốn đổi mật khẩu thì sửa biến môi trường rồi khởi động lại hoặc deploy lại. Đổi `ADMIN_EMAIL` sẽ làm mất hiệu lực các phiên đăng nhập cũ.
 
 ## Database và migration
 
@@ -60,7 +55,8 @@ Lấy connection string trên Neon: **Dashboard → Connect**, chọn region `aw
 | `pnpm db:migrate` | Khi đang phát triển: tạo migration mới từ `prisma/schema.prisma` và áp dụng lên DB dev (`prisma migrate dev`) |
 | `pnpm db:deploy` | Áp dụng các migration đã commit lên DB (`prisma migrate deploy`). Dùng cho DB production |
 
-- Cả hai lệnh đều dùng `DIRECT_URL`, được cấu hình trong [prisma.config.ts](prisma.config.ts).
+- Cả hai lệnh đều dùng kết nối direct (`DIRECT_URL` hoặc URL suy ra từ `DATABASE_URL`), cấu hình trong [prisma.config.ts](prisma.config.ts).
+- Nếu lệnh báo `P1001: Can't reach database server`, nhiều khả năng compute Neon đang ngủ (gói free tự suspend). Chạy lại lệnh sau vài giây.
 - Migration production **chạy thủ công** từ máy có `DIRECT_URL` của production. Build trên Vercel **không** tự migrate.
 - Prisma Client được sinh vào `lib/generated/prisma` (đã gitignore) mỗi lần `pnpm install`.
 
@@ -77,14 +73,11 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
    - `NEXT_PUBLIC_APP_URL` đặt bằng domain production.
    - Nếu dùng Preview deployment, nên trỏ `DATABASE_URL`/`DIRECT_URL` của Preview sang một Neon branch riêng.
 3. Region của function đã được cố định là `sin1` trong [vercel.json](vercel.json), cùng region với Neon.
-4. Trước lần deploy đầu tiên, hoặc khi có migration mới, chạy ở máy local với `DIRECT_URL` production:
+4. Trước lần deploy đầu tiên, hoặc khi có migration mới, chạy ở máy local với `DATABASE_URL` production:
    ```bash
    pnpm db:deploy
    ```
-5. Thêm redirect URI production vào Google OAuth client (xem phần Google OAuth).
-6. Nghiệm thu P0:
-   - đăng nhập được bằng email có trong allowlist;
-   - email ngoài allowlist bị từ chối và thấy thông báo "Email này không có quyền truy cập…".
+5. Nghiệm thu: đăng nhập được bằng tài khoản admin; sai mật khẩu thì thấy "Email hoặc mật khẩu không đúng."
 
 ## Cấu trúc chính
 
@@ -93,7 +86,7 @@ app/(auth)/login         trang đăng nhập
 app/(dashboard)/events   trang danh sách buổi đánh giá (placeholder ở P0)
 app/api/auth/[...]       handler Auth.js
 auth.config.ts           cấu hình Auth.js dùng chung cho proxy (không import Prisma)
-lib/auth.ts              Auth.js đầy đủ: allowlist, upsert Lecturer, requireLecturer()
+lib/auth.ts              Auth.js (Credentials admin), upsert Lecturer, requireLecturer()
 lib/db.ts                Prisma Client singleton dùng Neon adapter
 lib/env.ts               validate biến môi trường
 proxy.ts                 bảo vệ route (Next 16 thay middleware.ts)

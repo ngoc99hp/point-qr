@@ -4,12 +4,9 @@ import type { RawEnv } from "./env";
 const VALID_ENV = {
   DATABASE_URL:
     "postgresql://user:pass@ep-x-pooler.ap-southeast-1.aws.neon.tech/db?sslmode=require",
-  DIRECT_URL:
-    "postgresql://user:pass@ep-x.ap-southeast-1.aws.neon.tech/db?sslmode=require",
   AUTH_SECRET: "a".repeat(32),
-  AUTH_GOOGLE_ID: "google-id",
-  AUTH_GOOGLE_SECRET: "google-secret",
-  ALLOWED_LECTURER_EMAILS: " A@hpu.edu.vn, b@hpu.edu.vn ,,",
+  ADMIN_EMAIL: " Admin@HPU.edu.vn ",
+  ADMIN_PASSWORD: "p".repeat(16),
   TICKET_SECRET: "t".repeat(32),
   NEXT_PUBLIC_APP_URL: "https://peerscore.example.com",
 } satisfies RawEnv;
@@ -31,13 +28,20 @@ describe("lib/env", () => {
     vi.unstubAllEnvs();
   });
 
-  it("parses a valid environment and normalizes the email allowlist", async () => {
+  it("parses a valid environment and normalizes the admin email", async () => {
     const parseEnv = await loadParseEnv();
 
     const env = parseEnv(VALID_ENV);
 
-    expect(env.ALLOWED_LECTURER_EMAILS).toEqual(["a@hpu.edu.vn", "b@hpu.edu.vn"]);
+    expect(env.ADMIN_EMAIL).toBe("admin@hpu.edu.vn");
+    expect(env.ADMIN_PASSWORD).toBe(VALID_ENV.ADMIN_PASSWORD);
     expect(env.DATABASE_URL).toBe(VALID_ENV.DATABASE_URL);
+  });
+
+  it("does not require DIRECT_URL at runtime", async () => {
+    const parseEnv = await loadParseEnv();
+
+    expect(() => parseEnv(VALID_ENV)).not.toThrow();
   });
 
   it("exports a validated env constant from process.env", async () => {
@@ -61,12 +65,12 @@ describe("lib/env", () => {
         ...VALID_ENV,
         DATABASE_URL: "not-a-url",
         TICKET_SECRET: secretValue,
-        AUTH_GOOGLE_ID: undefined,
+        ADMIN_EMAIL: undefined,
       });
 
     expect(run).toThrow(/DATABASE_URL/);
     expect(run).toThrow(/TICKET_SECRET/);
-    expect(run).toThrow(/AUTH_GOOGLE_ID/);
+    expect(run).toThrow(/ADMIN_EMAIL/);
     expect(run).not.toThrow(new RegExp(secretValue));
   });
 
@@ -78,14 +82,19 @@ describe("lib/env", () => {
     );
   });
 
-  it("rejects an allowlist that is empty or contains an invalid email", async () => {
+  it("rejects an invalid admin email", async () => {
     const parseEnv = await loadParseEnv();
 
-    expect(() => parseEnv({ ...VALID_ENV, ALLOWED_LECTURER_EMAILS: " , " })).toThrow(
-      /ALLOWED_LECTURER_EMAILS/,
+    expect(() => parseEnv({ ...VALID_ENV, ADMIN_EMAIL: "not-an-email" })).toThrow(
+      /ADMIN_EMAIL/,
     );
-    expect(() =>
-      parseEnv({ ...VALID_ENV, ALLOWED_LECTURER_EMAILS: "a@hpu.edu.vn,not-an-email" }),
-    ).toThrow(/ALLOWED_LECTURER_EMAILS/);
+  });
+
+  it("rejects an admin password shorter than 16 characters", async () => {
+    const parseEnv = await loadParseEnv();
+
+    expect(() => parseEnv({ ...VALID_ENV, ADMIN_PASSWORD: "p".repeat(15) })).toThrow(
+      /ADMIN_PASSWORD/,
+    );
   });
 });

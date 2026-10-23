@@ -2,24 +2,14 @@ import "server-only";
 import { z } from "zod";
 
 const MIN_SECRET_LENGTH = 32;
+const MIN_ADMIN_PASSWORD_LENGTH = 16;
 
-const emailList = z
-  .string()
-  .transform((value) =>
-    value
-      .split(",")
-      .map((email) => email.trim().toLowerCase())
-      .filter((email) => email.length > 0),
-  )
-  .pipe(z.array(z.email()).min(1, "Cần ít nhất 1 email"));
-
+// DIRECT_URL is intentionally absent: only the Prisma CLI needs it (prisma.config.ts).
 const envSchema = z.object({
   DATABASE_URL: z.url(),
-  DIRECT_URL: z.url(),
   AUTH_SECRET: z.string().min(MIN_SECRET_LENGTH),
-  AUTH_GOOGLE_ID: z.string().min(1),
-  AUTH_GOOGLE_SECRET: z.string().min(1),
-  ALLOWED_LECTURER_EMAILS: emailList,
+  ADMIN_EMAIL: z.string().trim().toLowerCase().pipe(z.email()),
+  ADMIN_PASSWORD: z.string().min(MIN_ADMIN_PASSWORD_LENGTH),
   TICKET_SECRET: z.string().min(MIN_SECRET_LENGTH),
   NEXT_PUBLIC_APP_URL: z.url(),
 });

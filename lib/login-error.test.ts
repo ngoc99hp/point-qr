@@ -6,8 +6,12 @@ describe("getLoginErrorMessage", () => {
     expect(getLoginErrorMessage(undefined)).toBeNull();
   });
 
-  it("explains an AccessDenied error in Vietnamese", () => {
-    expect(getLoginErrorMessage("AccessDenied")).toMatch(/không có quyền truy cập/);
+  it("explains a revoked session", () => {
+    expect(getLoginErrorMessage("AccessDenied")).toMatch(/đăng nhập lại/);
+  });
+
+  it("explains invalid credentials", () => {
+    expect(getLoginErrorMessage("CredentialsSignin")).toBe("Email hoặc mật khẩu không đúng.");
   });
 
   it.each(["Configuration", "__proto__", "constructor", "toString", "hasOwnProperty"])(

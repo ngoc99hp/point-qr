@@ -34,9 +34,10 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Skip Next internals and static assets only. Other dotted paths
+  // Skip Next internals, static assets and the Auth.js handler (running the auth()
+  // wrapper there would set a second, conflicting CSRF cookie). Other dotted paths
   // (e.g. /api/.../export.csv) still go through the default-deny check.
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpe?g|gif|webp|avif|ico|txt|xml|webmanifest|woff2?)$).*)",
+    "/((?!_next/static|_next/image|api/auth/|favicon\\.ico|.*\\.(?:svg|png|jpe?g|gif|webp|avif|ico|txt|xml|webmanifest|woff2?)$).*)",
   ],
 };
