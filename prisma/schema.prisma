@@ -1,0 +1,17 @@
+// Prisma 7: connection URLs live in prisma.config.ts (CLI) and lib/db.ts (runtime adapter).
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// P0: only Lecturer. The `events` relation is added in P1 (SPEC §4.2).
+model Lecturer {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
