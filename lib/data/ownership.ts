@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 export async function findOwnedEvent(lecturerId: string, eventId: string) {
   return db.event.findFirst({
     where: { id: eventId, ownerId: lecturerId },
-    select: { id: true, status: true },
+    select: { id: true, code: true, status: true },
   });
 }
 
