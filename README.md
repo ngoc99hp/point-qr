@@ -2,8 +2,12 @@
 
 PeerScore cho sinh viên chấm điểm phần thuyết trình của nhóm bạn bằng cách quét mã QR. Giảng viên xem kết quả theo thời gian thực trên màn chiếu.
 Đặc tả đầy đủ nằm trong [SPEC.md](SPEC.md). Trạng thái hiện tại: **P2 đã xong.**
-- Đã có: tạo buổi đánh giá, nhập danh sách lớp kèm nhóm, mở/đóng phiên chấm, QR tĩnh, form chấm cho sinh viên (kiểm tra MSV ngay khi nhập), màn chiếu realtime (điểm trung bình kèm danh sách người chấm), gắn cờ và tự loại phiếu nghi vấn, trang kết quả kèm xếp hạng và xuất CSV.
-- Còn lại: QR xoay vòng, ticket, rate limit (P3); dark mode, toàn màn hình, E2E/load test (P4).
+- Đã có: tạo buổi đánh giá, nhập danh sách lớp kèm nhóm, mở/đóng phiên chấm, QR xoay vòng hoặc cố định, form chấm cho sinh viên (kiểm tra MSV ngay khi nhập), màn chiếu realtime (điểm trung bình kèm danh sách người chấm), gắn cờ và tự loại phiếu nghi vấn, trang kết quả kèm xếp hạng và xuất CSV.
+- **P3 (chống gian lận):**
+  - QR xoay vòng đổi mỗi 30 giây nên sinh viên phải quét tại lớp. Có thể tắt để dùng QR cố định.
+  - Ticket ký số có hạn 15 phút cho từng nhóm.
+  - Mỗi điện thoại gửi tối đa 10 lần mỗi phút.
+- Còn lại: dark mode, toàn màn hình, E2E/load test (P4).
 
 **Stack:**
 - Next.js 16 (App Router, Cache Components), TypeScript 5.9 strict
@@ -58,7 +62,7 @@ Lấy connection string trên Neon: **Dashboard → Connect**, chọn region `aw
 | `pnpm db:deploy` | Áp dụng các migration đã commit lên DB (`prisma migrate deploy`). Dùng cho DB production |
 
 - Cả hai lệnh đều dùng kết nối direct (`DIRECT_URL` hoặc URL suy ra từ `DATABASE_URL`), cấu hình trong [prisma.config.ts](prisma.config.ts).
-- Nếu lệnh báo `P1001: Can't reach database server`, nhiều khả năng compute Neon đang ngủ (gói free tự suspend). Chạy lại lệnh sau vài giây.
+- Nếu lệnh báo `P1001: Can't reach database server`, nhiều khả năng compute Neon đang ngủ (gói free tự suspend; lần đánh thức có thể mất khoảng 10 giây, lâu hơn thời gian chờ của Prisma CLI). Mở app hoặc chạy lại lệnh sau vài giây. Cũng có thể thêm `&connect_timeout=20` vào cuối `DATABASE_URL`.
 - Migration production **chạy thủ công** từ máy có connection string của DB production. Build trên Vercel **không** tự migrate.
 - Prisma Client được sinh vào `lib/generated/prisma` (đã gitignore) mỗi lần `pnpm install`.
 
@@ -70,7 +74,9 @@ Lấy connection string trên Neon: **Dashboard → Connect**, chọn region `aw
    - Xem trước để kiểm tra lỗi từng dòng, rồi bấm **Xác nhận nhập danh sách**.
    - Nhóm được tạo tự động và xếp theo số trong tên nhóm.
    - Nếu cần, chỉnh bước điểm, độ dài MSV (mặc định 5–15 chữ số) và chỉ số xếp hạng.
-4. Bấm **Mở màn chiếu** rồi chiếu trang này lên. Sinh viên quét mã QR, mở `/r/<mã>`.
+4. Bấm **Mở màn chiếu** rồi chiếu trang này lên. Sinh viên quét mã QR để mở `/r/<mã>`.
+   - **QR xoay vòng** (mặc định): mã đổi mỗi 30 giây. Sinh viên phải quét **cho từng nhóm**, vì ảnh chụp mã gửi ra ngoài sẽ hết hạn sau khoảng 1 phút.
+   - **QR cố định**: tắt "QR xoay vòng" trong cấu hình buổi. Một mã dùng cho cả buổi, trang sinh viên tự chuyển sang nhóm mới.
 5. Khi một nhóm trình bày xong, chọn nhóm đó rồi bấm **Mở chấm**, hoặc bấm **Nhóm tiếp →**. Mở nhóm mới sẽ tự đóng nhóm đang mở.
 6. Sinh viên nhập MSV, họ tên, chọn điểm rồi gửi.
    - Trang báo ngay nếu MSV không có trong danh sách hoặc sinh viên đang chấm chính nhóm mình.

@@ -42,4 +42,7 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 - **Integration tests** (`tests/integration/`, `pnpm test:integration`) run against the **main Neon DB** (owner decision D11). Every file creates a throwaway `Lecturer` (`…@test.invalid`) and deletes it in `afterAll` (cascade). Never touch rows the test did not create.
 - **Business logic that needs the DB** lives in `lib/ratings/` / `lib/data/` (no `next/headers`), so it can be integration-tested; Server Actions are thin wrappers.
 - **Owner decisions D1–D11 are settled** (SPEC §16): numeric student codes, projector = QR | mean + rater list, instant roster check, auto-exclude multi-student devices, no login rate limit.
+- **Tickets (P3):** public student calls go through `passTicketGate` (`lib/ratings/ticket-gate.ts`: verify ticket → resolve event → device rate limit). Never accept a raw `roundId` from the client again. `lib/ticket.ts` stays pure (secret/now injected); use domain-separated HMACs.
+- **Clock in render:** `Date.now()` in a Server Component trips `react-hooks/purity`; pass time into data functions as a default parameter instead.
+- **Neon cold start** can take ~10 s; if a DB script/test fails with P1001 or a WebSocket ErrorEvent, wake the DB and retry before debugging.
 - **Scripted edits:** never use `String.replace` with a string replacement containing `$` (`` $` `` / `$'` / `$&` are special); use the Edit tool or a function replacement.
