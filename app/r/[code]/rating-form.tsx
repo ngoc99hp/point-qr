@@ -52,6 +52,8 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
     initialData: initialCurrent,
     refetchInterval: POLL_CURRENT_MS,
     refetchIntervalInBackground: false,
+    // initialData comes from the server render; don't refetch immediately on mount.
+    staleTime: POLL_CURRENT_MS - 500,
   });
   const current = data.current;
   const roundId = current?.roundId ?? null;
@@ -80,6 +82,8 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
 
   function handleResult(result: SubmitRatingResult, submittedScore: number, forRound: string) {
     if (result.success) {
+      // Remember only details the server accepted, for autofill on the next group.
+      saveStudent({ studentCode, studentName });
       setSubmitted({ roundId: forRound, score: submittedScore, status: result.data.status });
       toast.success(result.data.status === "created" ? "Đã gửi điểm." : "Đã cập nhật điểm.");
       return;
@@ -103,7 +107,6 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
     const forRound = current.roundId;
     const chosen = score;
     setErrors({});
-    saveStudent({ studentCode, studentName });
     startTransition(async () => {
       try {
         const result = await submitRating({

@@ -1,7 +1,10 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { QueryProvider } from "@/components/query-provider";
+import { LOGIN_PATH } from "@/lib/routes";
 import type { LiveResponse } from "@/lib/types/live";
 import { LiveStats } from "./live-stats";
 import { QrCode } from "./qr-code";
@@ -24,8 +27,11 @@ export function LiveScreen(props: LiveScreenProps) {
   );
 }
 
+class UnauthorizedError extends Error {}
+
 async function fetchLive(eventId: string): Promise<LiveResponse> {
   const response = await fetch(`/api/events/${eventId}/live`, { cache: "no-store" });
+  if (response.status === 401) throw new UnauthorizedError();
   if (!response.ok) throw new Error(`live ${response.status}`);
   return (await response.json()) as LiveResponse;
 }
@@ -33,13 +39,23 @@ async function fetchLive(eventId: string): Promise<LiveResponse> {
 function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
   const queryClient = useQueryClient();
   const queryKey = ["live", eventId];
-  const { data, isError } = useQuery({
+  const router = useRouter();
+  const pathname = usePathname();
+  const { data, isError, error } = useQuery({
     queryKey,
     queryFn: () => fetchLive(eventId),
     // SPEC §6.2: 2s while a round is open, 10s otherwise; pause when the tab is hidden.
     refetchInterval: (query) => (query.state.data?.current ? POLL_OPEN_MS : POLL_IDLE_MS),
     refetchIntervalInBackground: false,
+    retry: (failureCount, queryError) => !(queryError instanceof UnauthorizedError) && failureCount < 1,
   });
+
+  // Session expired (12h): back to login, then return to this screen.
+  useEffect(() => {
+    if (error instanceof UnauthorizedError) {
+      router.replace(`${LOGIN_PATH}?callbackUrl=${encodeURIComponent(pathname)}`);
+    }
+  }, [error, router, pathname]);
 
   if (!data) {
     return (

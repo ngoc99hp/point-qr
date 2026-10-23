@@ -103,46 +103,58 @@ interface SaveRatingInput {
   userAgent: string | null;
 }
 
+type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
+
+const roundForRatingSelect = {
+  id: true,
+  status: true,
+  group: { select: { name: true } },
+  event: {
+    select: {
+      id: true,
+      status: true,
+      minScore: true,
+      maxScore: true,
+      scoreStep: true,
+      studentCodePattern: true,
+    },
+  },
+} as const;
+
+/**
+ * Loads the round under a row lock (FOR SHARE) so a concurrent closeRound/openRound
+ * — which UPDATE that row — waits for this transaction, and vice versa (BR-03).
+ * Then applies BR-03, BR-04 and BR-05, throwing a SubmitRejection on failure.
+ */
+async function loadAcceptingRound(tx: Tx, input: SaveRatingInput) {
+  await tx.$queryRaw`SELECT 1 FROM "Round" WHERE id = ${input.roundId} FOR SHARE`;
+  const round = await tx.round.findFirst({
+    where: { id: input.roundId, event: { code: input.eventCode } },
+    select: roundForRatingSelect,
+  });
+  if (!round) {
+    throw new SubmitRejection(
+      fail("TICKET_INVALID", "Phiên chấm không hợp lệ. Vui lòng quét lại mã QR trên màn chiếu."),
+    );
+  }
+  if (round.status !== "OPEN" || round.event.status === "ARCHIVED") {
+    logger.warn("submitRating rejected", { eventId: round.event.id, roundId: round.id, code: "ROUND_CLOSED" });
+    throw new SubmitRejection(fail("ROUND_CLOSED", "Phiên chấm đã đóng."));
+  }
+  if (!matchesStudentCodePattern(input.studentCode, round.event.studentCodePattern)) {
+    throw new SubmitRejection(
+      fail("VALIDATION", "MSV không đúng định dạng. Vui lòng kiểm tra lại.", "studentCode"),
+    );
+  }
+  if (!isValidScore(input.score, toScoreConfig(round.event))) {
+    throw new SubmitRejection(fail("VALIDATION", "Điểm không hợp lệ.", "score"));
+  }
+  return round;
+}
+
 async function saveRating(input: SaveRatingInput): Promise<SubmitRatingResult> {
   return db.$transaction(async (tx) => {
-    const round = await tx.round.findFirst({
-      where: { id: input.roundId, event: { code: input.eventCode } },
-      select: {
-        id: true,
-        status: true,
-        group: { select: { name: true } },
-        event: {
-          select: {
-            id: true,
-            status: true,
-            minScore: true,
-            maxScore: true,
-            scoreStep: true,
-            studentCodePattern: true,
-          },
-        },
-      },
-    });
-    if (!round) {
-      throw new SubmitRejection(
-        fail("TICKET_INVALID", "Phiên chấm không hợp lệ. Vui lòng quét lại mã QR trên màn chiếu."),
-      );
-    }
-
-    const context = { eventId: round.event.id, roundId: round.id };
-    if (round.status !== "OPEN" || round.event.status === "ARCHIVED") {
-      logger.warn("submitRating rejected", { ...context, code: "ROUND_CLOSED" });
-      throw new SubmitRejection(fail("ROUND_CLOSED", "Phiên chấm đã đóng."));
-    }
-    if (!matchesStudentCodePattern(input.studentCode, round.event.studentCodePattern)) {
-      throw new SubmitRejection(
-        fail("VALIDATION", "MSV không đúng định dạng. Vui lòng kiểm tra lại.", "studentCode"),
-      );
-    }
-    if (!isValidScore(input.score, toScoreConfig(round.event))) {
-      throw new SubmitRejection(fail("VALIDATION", "Điểm không hợp lệ.", "score"));
-    }
-
+    const round = await loadAcceptingRound(tx, input);
     const writable = {
       studentName: input.studentName,
       score: input.score,
@@ -156,7 +168,6 @@ async function saveRating(input: SaveRatingInput): Promise<SubmitRatingResult> {
       update: { ...writable, editCount: { increment: 1 } },
       select: { editCount: true },
     });
-
     return ok({
       status: rating.editCount === 0 ? "created" : "updated",
       groupName: round.group.name,

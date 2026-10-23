@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidRegexPattern } from "@/lib/normalize";
+import { isSafeStudentCodePattern } from "@/lib/normalize";
 
 export const EVENT_TITLE_MAX = 120;
 export const STUDENT_CODE_PATTERN_MAX = 100;
@@ -41,7 +41,9 @@ export const eventSettingsSchema = z
       .trim()
       .min(1, "Vui lòng nhập định dạng MSV.")
       .max(STUDENT_CODE_PATTERN_MAX, `Tối đa ${STUDENT_CODE_PATTERN_MAX} ký tự.`)
-      .refine(isValidRegexPattern, { message: "Biểu thức chính quy không hợp lệ." }),
+      .refine(isSafeStudentCodePattern, {
+        message: "Định dạng MSV không hợp lệ hoặc quá phức tạp (không dùng nhóm lặp lồng nhau, lookaround).",
+      }),
   })
   .refine((value) => value.minScore < value.maxScore, {
     message: "Điểm tối đa phải lớn hơn điểm tối thiểu.",

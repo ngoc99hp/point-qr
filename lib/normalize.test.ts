@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesStudentCodePattern, normalizeCode } from "./normalize";
+import { isSafeStudentCodePattern, matchesStudentCodePattern, normalizeCode } from "./normalize";
 
 describe("normalizeCode (BR-04)", () => {
   it("trims and uppercases", () => {
@@ -27,4 +27,27 @@ describe("matchesStudentCodePattern", () => {
   it("treats an invalid stored pattern as no match instead of throwing", () => {
     expect(matchesStudentCodePattern("SV12345", "([")).toBe(false);
   });
+
+  it("matches the whole code even when the pattern is not anchored", () => {
+    expect(matchesStudentCodePattern("ABC12345678", "\\d{8}")).toBe(false);
+    expect(matchesStudentCodePattern("12345678", "\\d{8}")).toBe(true);
+    expect(matchesStudentCodePattern("SV1", "SV1|SV2")).toBe(true);
+    expect(matchesStudentCodePattern("XSV1", "SV1|SV2")).toBe(false);
+  });
+});
+
+describe("isSafeStudentCodePattern", () => {
+  it.each(["^[A-Z0-9]{5,15}$", "\\d{8}", "^(SV|GV)\\d{6}$", "[A-Z]{2}\\d+"])(
+    "accepts %s",
+    (pattern) => {
+      expect(isSafeStudentCodePattern(pattern)).toBe(true);
+    },
+  );
+
+  it.each(["(a+)+$", "^(\\d*)*$", "(x+){2,}", "([A-Z]+)*", "(", "(?<=A)B"])(
+    "rejects invalid or catastrophic-backtracking pattern %s",
+    (pattern) => {
+      expect(isSafeStudentCodePattern(pattern)).toBe(false);
+    },
+  );
 });

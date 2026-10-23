@@ -20,6 +20,7 @@ const INVALID = "Dữ liệu không hợp lệ.";
 const GROUP_NOT_FOUND = "Không tìm thấy nhóm.";
 const DUPLICATE_NAME = "Tên nhóm đã tồn tại trong buổi đánh giá này.";
 const MAX_ADD_ATTEMPTS = 3;
+const ARCHIVED = "Buổi đánh giá đã lưu trữ. Khôi phục để chỉnh sửa nhóm.";
 
 export async function addGroup(eventIdInput: string): Promise<ActionResult> {
   const { lecturerId } = await requireLecturer();
@@ -28,6 +29,7 @@ export async function addGroup(eventIdInput: string): Promise<ActionResult> {
 
   const event = await findOwnedEvent(lecturerId, parsed.data.eventId);
   if (!event) return fail("NOT_FOUND", "Không tìm thấy buổi đánh giá.");
+  if (event.status === "ARCHIVED") return fail("EVENT_ARCHIVED", ARCHIVED);
 
   // Retry when a concurrent add took the same order/name.
   for (let attempt = 0; attempt < MAX_ADD_ATTEMPTS; attempt += 1) {
@@ -59,6 +61,7 @@ export async function renameGroup(groupIdInput: string, nameInput: string): Prom
 
   const group = await findOwnedGroup(lecturerId, parsed.data.groupId);
   if (!group) return fail("NOT_FOUND", GROUP_NOT_FOUND);
+  if (group.event.status === "ARCHIVED") return fail("EVENT_ARCHIVED", ARCHIVED);
 
   try {
     await db.group.update({
@@ -84,6 +87,7 @@ export async function moveGroup(
 
   const group = await findOwnedGroup(lecturerId, parsed.data.groupId);
   if (!group) return fail("NOT_FOUND", GROUP_NOT_FOUND);
+  if (group.event.status === "ARCHIVED") return fail("EVENT_ARCHIVED", ARCHIVED);
 
   const isUp = parsed.data.direction === "up";
   const neighbor = await db.group.findFirst({
@@ -110,6 +114,7 @@ export async function deleteGroup(groupIdInput: string): Promise<ActionResult> {
 
   const group = await findOwnedGroup(lecturerId, parsed.data.groupId);
   if (!group) return fail("NOT_FOUND", GROUP_NOT_FOUND);
+  if (group.event.status === "ARCHIVED") return fail("EVENT_ARCHIVED", ARCHIVED);
   if (group.round?.status === "OPEN") {
     return fail("ROUND_OPEN", "Hãy đóng phiên chấm của nhóm này trước khi xóa.");
   }

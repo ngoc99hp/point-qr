@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { resolveDirectUrl, toDirectUrl } from "./neon-url";
 
 const POOLED =
-  "postgresql://user:p%40ss@ep-proud-brook-a1v4sr4y-pooler.ap-southeast-1.aws.neon.tech/pointqr?sslmode=require&channel_binding=require";
+  "postgresql://user:p%40ss@ep-example-123456-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 const DIRECT =
-  "postgresql://user:p%40ss@ep-proud-brook-a1v4sr4y.ap-southeast-1.aws.neon.tech/pointqr?sslmode=require&channel_binding=require";
+  "postgresql://user:p%40ss@ep-example-123456.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
 describe("toDirectUrl", () => {
   it("removes -pooler from the endpoint host and keeps everything else", () => {
