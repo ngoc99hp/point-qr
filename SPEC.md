@@ -653,6 +653,27 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 - QR xoay vòng và ticket (§9.1, 9.2), rate limit theo device (§9.3).
 - **Nghiệm thu:** Token cũ hơn 60 giây bị từ chối, ticket không dùng được cho round khác, unit test `ticket.ts` pass.
 
+**Làm rõ phạm vi P3** (chốt 23/10/2026):
+- **`lib/ticket.ts` (hàm thuần, nhận `secret` và `now` qua tham số để test):**
+  - QR token theo §9.1. Ticket có dạng `base64url(JSON{ r: roundId, iat, exp }) + "." + base64url(HMAC-SHA256)`, hạn 15 phút.
+  - HMAC của QR token và của ticket dùng **tiền tố miền khác nhau** (`qr:` / `ticket:`) để không dùng lẫn được cho nhau.
+  - So chữ ký bằng `timingSafeEqual`.
+- **`roundId` trong form SV được thay bằng `ticket`** (đúng hợp đồng §7). `submitRating` và `checkStudentCode` đều yêu cầu ticket hợp lệ. Lỗi trả về:
+  - `TICKET_INVALID`: sai chữ ký hoặc sai event.
+  - `TICKET_EXPIRED`: quá hạn 15 phút. Thông báo "Vui lòng quét lại mã QR trên màn chiếu."
+- **Chế độ `rotatingQr = true` (mặc định cho event mới từ P3):**
+  - Màn chiếu gọi `GET /api/events/[id]/qr-token` mỗi 20 giây khi có round OPEN. QR trỏ tới `/r/[code]?t=<token>`.
+  - Trang SV verify token ở server rồi phát ticket. Token sai/cũ hoặc thiếu `t`: hiện màn "Vui lòng quét lại mã QR trên màn chiếu".
+  - Trang SV vẫn polling `current` để báo "Nhóm khác đã được mở — quét lại mã QR". Endpoint public **không** phát ticket ở chế độ này.
+- **Chế độ `rotatingQr = false`:** server phát ticket cho round OPEN hiện tại. Endpoint `current` kèm ticket mới mỗi khi round đổi, nên trang SV tự chuyển nhóm như P1.
+- **Công tắc** "QR xoay vòng (buộc quét tại lớp)" nằm trong cấu hình event và đổi được bất cứ lúc nào.
+- **Rate limit (§9.3):**
+  - Dùng bảng nhẹ `SubmitAttempt(eventId, deviceId, kind, createdAt)`.
+  - `submitRating`: tối đa **10 lần/phút/thiết bị/event** → `RATE_LIMITED` ("Bạn gửi quá nhanh. Vui lòng đợi một chút rồi thử lại.").
+  - `checkStudentCode`: tối đa **30 lần/phút/thiết bị/event**, nhận thêm `deviceId`, quá giới hạn thì trả trạng thái `RATE_LIMITED`.
+  - Bản ghi cũ hơn 1 giờ của event được xóa dần mỗi khi ghi thêm. Không rate limit theo IP.
+- **Không đổi:** cờ, loại phiếu, roster, xếp hạng (P2).
+
 ### P4: Hoàn thiện
 - Dark mode, toàn màn hình, tối ưu UI màn chiếu (bỏ `hideRaterNamesOnProjector` theo D6), CSP đầy đủ.
 - E2E Playwright và load test.
