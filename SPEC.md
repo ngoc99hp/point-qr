@@ -320,8 +320,8 @@ app/
     events/[id]/export/route.ts          ← GET ?type=summary|raw (auth) → CSV
     public/events/[code]/current/route.ts← GET: nhóm đang mở (public, cho chế độ QR tĩnh)
   actions/
-    events.ts      ← createEvent, updateEventSettings, archiveEvent
-    roster.ts      ← importRoster, upsertGroup, deleteGroup
+    events.ts      ← createEvent, updateEventSettings, setEventArchived (lưu trữ / khôi phục)
+    roster.ts      ← addGroup, renameGroup, moveGroup, deleteGroup (P1); importRoster (P2)
     rounds.ts      ← openRound(groupId), closeRound(roundId)
     ratings.ts     ← submitRating (public), setRatingExcluded (auth)
 lib/
@@ -332,6 +332,9 @@ lib/
   normalize.ts      ← normalizeCode, normalizeName (unit test)
   ticket.ts         ← sign/verify QR token & ticket (unit test)
   validations/*.ts
+  data/             ← truy vấn server-only: ownership (lọc ownerId), live snapshot, public
+  action-result.ts  ← kiểu { success, data } | { success, error: { code, message, field? } }
+  score.ts, event-code.ts, format.ts (BR-14), student-storage.ts (localStorage phía SV)
 types/next-auth.d.ts← mở rộng type Session/JWT với lecturerId
 prisma/schema.prisma, prisma/migrations/
 prisma.config.ts
@@ -649,3 +652,6 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 | T18 | P1 chưa có ticket/roster | Dùng `roundId` thay ticket; bỏ qua BR-07..10 (§14 P1) |
 | T19 | Thư viện form ở P1 | Form dùng Server Action + `useActionState`, lỗi theo từng trường do server trả về. `react-hook-form` chỉ thêm khi form cần validate phía client phức tạp (P2 import roster) |
 | T20 | `cn` | Dùng package `cn` do shadcn CLI cài (của shadcn-ui, thay cho `clsx` + `tailwind-merge`) |
+| T21 | HTTP 404 trên trang có streaming | Với Cache Components/PPR, `notFound()` bên trong `<Suspense>` vẫn trả HTTP 200, nhưng hiển thị trang 404 tiếng Việt kèm `noindex`. Event không tồn tại và event của người khác hiển thị **giống hệt nhau**, nên không lộ thông tin. Route handler `/api/*` vẫn trả HTTP 404 thật |
+| T22 | Proxy và `/api/auth/*` | Proxy matcher bỏ qua `/api/auth/*`, vì chạy wrapper `auth()` ở đó sẽ đặt thêm một cookie CSRF thứ hai gây xung đột |
+| T23 | Trang public không đọc cookie | Gọi `await connection()` trước khi truy vấn DB (Cache Components), nếu không Next báo lỗi "unstable value" khi prerender |

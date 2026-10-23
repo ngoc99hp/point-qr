@@ -1,11 +1,11 @@
 # PeerScore
 
 PeerScore cho sinh viên chấm điểm phần thuyết trình của nhóm bạn bằng cách quét mã QR. Giảng viên xem kết quả theo thời gian thực trên màn chiếu.
-Đặc tả đầy đủ nằm trong [SPEC.md](SPEC.md). Trạng thái hiện tại: **P0, khung dự án** (đăng nhập giảng viên, chưa có nghiệp vụ chấm điểm).
+Đặc tả đầy đủ nằm trong [SPEC.md](SPEC.md). Trạng thái hiện tại: **P1, MVP dùng được trên lớp**. Đã có: tạo buổi đánh giá, quản lý nhóm thủ công, mở/đóng phiên chấm, QR tĩnh, form chấm cho sinh viên và màn chiếu realtime. Còn ở các phase sau: roster, gắn cờ, trang kết quả/CSV (P2); QR xoay vòng, ticket, rate limit (P3).
 
 **Stack:**
 - Next.js 16 (App Router, Cache Components), TypeScript 5.9 strict
-- Tailwind v4 và shadcn/ui
+- Tailwind v4 và shadcn/ui; TanStack Query (polling); `qrcode` (render QR phía client)
 - Prisma 7 với `@prisma/adapter-neon`, chạy trên Neon Postgres (Singapore)
 - Auth.js v5 (1 tài khoản admin, JWT)
 - Vitest; deploy lên Vercel (`sin1`)
@@ -21,7 +21,7 @@ PeerScore cho sinh viên chấm điểm phần thuyết trình của nhóm bạn
 ```bash
 pnpm install                 # tự chạy `prisma generate` (postinstall)
 cp .env.example .env.local   # rồi điền giá trị thật (xem bảng dưới)
-pnpm db:deploy               # áp dụng migration lên DB trong DIRECT_URL
+pnpm db:deploy               # áp dụng migration lên DB Neon (kết nối direct)
 pnpm dev                     # http://localhost:3000
 ```
 
@@ -57,8 +57,23 @@ Lấy connection string trên Neon: **Dashboard → Connect**, chọn region `aw
 
 - Cả hai lệnh đều dùng kết nối direct (`DIRECT_URL` hoặc URL suy ra từ `DATABASE_URL`), cấu hình trong [prisma.config.ts](prisma.config.ts).
 - Nếu lệnh báo `P1001: Can't reach database server`, nhiều khả năng compute Neon đang ngủ (gói free tự suspend). Chạy lại lệnh sau vài giây.
-- Migration production **chạy thủ công** từ máy có `DIRECT_URL` của production. Build trên Vercel **không** tự migrate.
+- Migration production **chạy thủ công** từ máy có connection string của DB production. Build trên Vercel **không** tự migrate.
 - Prisma Client được sinh vào `lib/generated/prisma` (đã gitignore) mỗi lần `pnpm install`.
+
+## Cách dùng trên lớp
+
+1. Đăng nhập tại `/login` bằng tài khoản admin.
+2. Vào **Buổi đánh giá** và tạo một buổi mới. Mỗi buổi có một mã 6 ký tự.
+3. Ở trang thiết lập, thêm các nhóm ("Nhóm 1", "Nhóm 2", …), đổi tên hoặc sắp xếp lại nếu cần, và chỉnh bước điểm hay định dạng MSV.
+4. Bấm **Mở màn chiếu** rồi chiếu trang này lên. Sinh viên quét mã QR, mở `/r/<mã>`.
+5. Khi một nhóm trình bày xong, chọn nhóm đó rồi bấm **Mở chấm**, hoặc bấm **Nhóm tiếp →**. Mở nhóm mới sẽ tự đóng nhóm đang mở.
+6. Sinh viên nhập MSV, họ tên, chọn điểm rồi gửi. Gửi lại khi phiên còn mở thì điểm cũ được cập nhật. Trang sinh viên tự chuyển sang nhóm mới.
+7. Bấm **Đóng** khi kết thúc.
+
+Lưu ý:
+- QR trỏ tới `NEXT_PUBLIC_APP_URL`, nên giá trị này phải là địa chỉ **điện thoại truy cập được**. `localhost` chỉ dùng được trên chính máy đang chạy app.
+- Để thử trên điện thoại thật khi chạy local: đặt `NEXT_PUBLIC_APP_URL=http://<IP-LAN-của-máy>:3000` (máy tính và điện thoại cùng Wi-Fi), chạy `pnpm dev -H 0.0.0.0`, và mở port 3000 trên Windows Firewall nếu cần. Cách đơn giản hơn là deploy lên Vercel rồi thử bằng domain thật.
+- Gói free của Neon tự suspend khi không có truy cập. Hãy mở màn chiếu vài phút trước giờ học để "làm nóng" DB.
 
 ## Kiểm tra chất lượng
 
@@ -77,18 +92,23 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
    ```bash
    pnpm db:deploy
    ```
-5. Nghiệm thu: đăng nhập được bằng tài khoản admin; sai mật khẩu thì thấy "Email hoặc mật khẩu không đúng."
+5. Nghiệm thu P1 (SPEC §14): chạy thử trọn luồng trên 2 điện thoại thật. Gửi lại thì điểm được cập nhật; mở nhóm mới thì nhóm cũ tự đóng.
 
 ## Cấu trúc chính
 
 ```
-app/(auth)/login         trang đăng nhập
-app/(dashboard)/events   trang danh sách buổi đánh giá (placeholder ở P0)
-app/api/auth/[...]       handler Auth.js
-auth.config.ts           cấu hình Auth.js dùng chung cho proxy (không import Prisma)
-lib/auth.ts              Auth.js (Credentials admin), upsert Lecturer, requireLecturer()
-lib/db.ts                Prisma Client singleton dùng Neon adapter
-lib/env.ts               validate biến môi trường
-proxy.ts                 bảo vệ route (Next 16 thay middleware.ts)
-prisma/                  schema và migrations
+app/(auth)/login               đăng nhập admin (form + Server Action)
+app/(dashboard)/events         danh sách và tạo buổi đánh giá
+app/(dashboard)/events/[id]    thiết lập: cấu hình, nhóm, lưu trữ
+app/(dashboard)/events/[id]/live  màn chiếu: QR, điều khiển phiên, thống kê (polling)
+app/r/[code]                   form chấm của sinh viên (public, mobile-first)
+app/actions/                   Server Actions: events, roster (nhóm), rounds, ratings
+app/api/events/[id]/live       GET snapshot cho màn chiếu (cần đăng nhập)
+app/api/public/events/[code]/current  GET nhóm đang mở (public)
+lib/data/                      truy vấn có lọc ownerId, snapshot live, dữ liệu public
+lib/stats.ts, score.ts, normalize.ts, event-code.ts   hàm thuần, có unit test
+lib/auth.ts                    Auth.js (Credentials admin), requireLecturer()
+lib/db.ts, lib/env.ts          Prisma singleton (Neon adapter), validate env
+proxy.ts                       bảo vệ route (Next 16 thay middleware.ts)
+prisma/                        schema và migrations
 ```

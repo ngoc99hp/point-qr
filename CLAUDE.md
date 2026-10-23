@@ -32,5 +32,10 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
   - Migrations do not auto-generate the client; run `prisma generate` after schema changes.
 - **Auth.js v5 (pinned beta), single admin via Credentials (no OAuth):** the provider lives in `lib/auth.ts`; `auth.config.ts` must stay free of Prisma, `lib/env` and other server-only imports. Route handlers use `getCurrentLecturer()` (→ 401), pages/actions use `requireLecturer()`. `session.user.lecturerId` is typed in `types/next-auth.d.ts`. Every lecturer query filters by `ownerId = lecturerId`; another owner's resource returns 404.
 - **Env:** import `env` from `lib/env.ts` on the server only. Never log secrets, student codes or names.
-- **Decimal:** convert to `number` only in `lib/mappers.ts` (from P1).
+- **Decimal:** convert to `number` only in `lib/mappers.ts`; client components receive plain numbers.
+- **Server Actions** live in `app/actions/*`, start with `requireLecturer()` (except public `submitRating`), validate with Zod schemas from `lib/validations/`, and return `ok()` / `fail(code, message, field?)` from `lib/action-result.ts`. Use `refresh()` from `next/cache` after mutations shown by Server Components.
+- **Ownership:** look resources up through `lib/data/ownership.ts` (always filtered by `ownerId`); missing and foreign resources are the same "not found".
+- **Public pages** that read no cookies call `await connection()` before DB access (Cache Components).
+- **Client-safe types** for API payloads live in `lib/types/`; never import Prisma or `lib/env` into client components.
+- **Polling:** TanStack Query only on the live screen (2s open / 10s idle) and the student page (3s), via `components/query-provider.tsx`.
 - Tests live next to the code as `*.test.ts` (Vitest, node environment, `@/` alias).
