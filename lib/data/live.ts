@@ -1,12 +1,13 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { decimalToNumber } from "@/lib/mappers";
-import { computeStats } from "@/lib/stats";
+import { computeStats, type RatingInput } from "@/lib/stats";
+import { sortRatingsForProjector } from "@/lib/projector";
 import type { LiveGroup, LiveResponse } from "@/lib/types/live";
 
 /**
  * Snapshot for the projector screen: one query for the event, its groups and the
- * OPEN round's valid ratings, plus one groupBy for per-group counts (no N+1).
+ * OPEN round's ratings, plus one groupBy for per-group valid counts (no N+1).
  * Returns null when the event does not exist or belongs to another lecturer.
  */
 export async function getLiveSnapshot(
@@ -21,6 +22,7 @@ export async function getLiveSnapshot(
       code: true,
       status: true,
       rotatingQr: true,
+      trimRatio: true,
       groups: {
         orderBy: { order: "asc" },
         select: { id: true, name: true, order: true, round: { select: { id: true, status: true } } },
@@ -34,8 +36,14 @@ export async function getLiveSnapshot(
           openedAt: true,
           group: { select: { name: true } },
           ratings: {
-            where: { excluded: false },
-            select: { score: true, studentCode: true, studentName: true, createdAt: true },
+            select: {
+              score: true,
+              studentCode: true,
+              studentName: true,
+              createdAt: true,
+              excluded: true,
+              flags: true,
+            },
           },
         },
       },
@@ -59,6 +67,11 @@ export async function getLiveSnapshot(
   }));
 
   const open = event.rounds[0];
+  const ratings: RatingInput[] = (open?.ratings ?? []).map((rating) => ({
+    ...rating,
+    score: decimalToNumber(rating.score),
+  }));
+
   return {
     event: {
       id: event.id,
@@ -74,9 +87,8 @@ export async function getLiveSnapshot(
           groupId: open.groupId,
           groupName: open.group.name,
           openedAt: open.openedAt.toISOString(),
-          stats: computeStats(
-            open.ratings.map((rating) => ({ ...rating, score: decimalToNumber(rating.score) })),
-          ),
+          stats: computeStats(ratings, decimalToNumber(event.trimRatio)),
+          ratings: sortRatingsForProjector(ratings),
         }
       : null,
   };

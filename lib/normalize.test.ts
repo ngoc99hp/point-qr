@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isSafeStudentCodePattern, matchesStudentCodePattern, normalizeCode } from "./normalize";
+import {
+  isSafeStudentCodePattern,
+  matchesStudentCodePattern,
+  namesMatch,
+  normalizeCode,
+  normalizeName,
+} from "./normalize";
 
 describe("normalizeCode (BR-04)", () => {
   it("trims and uppercases", () => {
@@ -33,6 +39,25 @@ describe("matchesStudentCodePattern", () => {
     expect(matchesStudentCodePattern("12345678", "\\d{8}")).toBe(true);
     expect(matchesStudentCodePattern("SV1", "SV1|SV2")).toBe(true);
     expect(matchesStudentCodePattern("XSV1", "SV1|SV2")).toBe(false);
+  });
+});
+
+describe("normalizeName / namesMatch (BR-09)", () => {
+  it("removes diacritics, maps đ/Đ to d, lowercases and collapses spaces", () => {
+    expect(normalizeName("  Đào   Anh  Ngọc ")).toBe("dao anh ngoc");
+    expect(normalizeName("NGUYỄN THỊ HƯƠNG")).toBe("nguyen thi huong");
+  });
+
+  it('treats "Đào Anh Ngọc" and "dao anh ngoc" as the same name', () => {
+    expect(namesMatch("Đào Anh Ngọc", "dao anh ngoc")).toBe(true);
+  });
+
+  it("detects a different name", () => {
+    expect(namesMatch("Đào Anh Ngọc", "Đào Anh Ngân")).toBe(false);
+  });
+
+  it("handles composed and decomposed Unicode the same way", () => {
+    expect(namesMatch("Ngọc".normalize("NFC"), "Ngọc".normalize("NFD"))).toBe(true);
   });
 });
 

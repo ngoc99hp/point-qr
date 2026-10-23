@@ -35,8 +35,8 @@ model Event {
   maxScore                  Decimal       @default(10) @db.Decimal(3, 1)
   scoreStep                 Decimal       @default(0.5) @db.Decimal(2, 1)
   trimRatio                 Decimal       @default(0.1) @db.Decimal(3, 2)
-  rankingMetric             RankingMetric @default(TRIMMED_MEAN)
-  studentCodePattern        String        @default("^[A-Z0-9]{5,15}$") // applied after normalize
+  rankingMetric             RankingMetric @default(MEAN) // D3
+  studentCodePattern        String        @default("^[0-9]{5,15}$") // D1: HPU codes are digits only
   strictRoster              Boolean       @default(true)
   rotatingQr                Boolean       @default(true)
   hideRaterNamesOnProjector Boolean       @default(false)

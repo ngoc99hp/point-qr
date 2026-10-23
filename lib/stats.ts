@@ -1,11 +1,13 @@
-// Pure statistics for one group's ratings (SPEC §8). P1 subset: n, mean, median,
-// highest, lowest. P2 adds trimmedMean, stdDev, histogram, flagged/excluded counts.
+// Pure statistics for one group's ratings (SPEC §8).
+import type { RatingFlag } from "@/lib/types/rating";
 
 export interface RatingInput {
   score: number;
   studentCode: string;
   studentName: string;
   createdAt: Date;
+  excluded: boolean;
+  flags: readonly RatingFlag[];
 }
 
 export interface Rater {
@@ -22,10 +24,19 @@ export interface Extreme {
 export interface GroupStats {
   n: number;
   mean: number | null;
+  trimmedMean: number | null;
   median: number | null;
+  /** Sample standard deviation (n - 1); null when n < 2. */
+  stdDev: number | null;
   highest: Extreme | null;
   lowest: Extreme | null;
+  /** 11 buckets: floor(score), with 10 in bucket 10. */
+  histogram: number[];
+  flaggedCount: number;
+  excludedCount: number;
 }
+
+const HISTOGRAM_BUCKETS = 11;
 
 function mean(scores: readonly number[]): number {
   return scores.reduce((sum, score) => sum + score, 0) / scores.length;
@@ -39,6 +50,29 @@ function median(sortedScores: readonly number[]): number {
   return (lower + upper) / 2;
 }
 
+/** k = floor(n * ratio) from each end; falls back to the mean if nothing would remain. */
+function trimmedMean(sortedScores: readonly number[], trimRatio: number): number {
+  const k = Math.floor(sortedScores.length * trimRatio);
+  if (sortedScores.length - 2 * k < 1) return mean(sortedScores);
+  return mean(sortedScores.slice(k, sortedScores.length - k));
+}
+
+function sampleStdDev(scores: readonly number[]): number | null {
+  if (scores.length < 2) return null;
+  const average = mean(scores);
+  const squared = scores.reduce((sum, score) => sum + (score - average) ** 2, 0);
+  return Math.sqrt(squared / (scores.length - 1));
+}
+
+function histogram(scores: readonly number[]): number[] {
+  const buckets = new Array<number>(HISTOGRAM_BUCKETS).fill(0);
+  for (const score of scores) {
+    const bucket = Math.min(HISTOGRAM_BUCKETS - 1, Math.max(0, Math.floor(score)));
+    buckets[bucket] = (buckets[bucket] ?? 0) + 1;
+  }
+  return buckets;
+}
+
 function extreme(ratings: readonly RatingInput[], score: number): Extreme {
   const raters = ratings
     .filter((rating) => rating.score === score)
@@ -47,21 +81,41 @@ function extreme(ratings: readonly RatingInput[], score: number): Extreme {
   return { score, raters };
 }
 
-/** Values are not rounded here; round only when displaying (2 decimals). */
-export function computeStats(ratings: readonly RatingInput[]): GroupStats {
-  if (ratings.length === 0) {
-    return { n: 0, mean: null, median: null, highest: null, lowest: null };
+/**
+ * Score statistics use only ratings with excluded = false; flaggedCount and
+ * excludedCount cover every rating. Values are not rounded (round when displaying).
+ */
+export function computeStats(ratings: readonly RatingInput[], trimRatio: number): GroupStats {
+  const valid = ratings.filter((rating) => !rating.excluded);
+  const counts = {
+    flaggedCount: ratings.filter((rating) => rating.flags.length > 0).length,
+    excludedCount: ratings.length - valid.length,
+  };
+
+  if (valid.length === 0) {
+    return {
+      n: 0,
+      mean: null,
+      trimmedMean: null,
+      median: null,
+      stdDev: null,
+      highest: null,
+      lowest: null,
+      histogram: histogram([]),
+      ...counts,
+    };
   }
 
-  const sortedScores = ratings.map((rating) => rating.score).toSorted((a, b) => a - b);
-  const lowestScore = sortedScores[0] ?? 0;
-  const highestScore = sortedScores[sortedScores.length - 1] ?? 0;
-
+  const sortedScores = valid.map((rating) => rating.score).toSorted((a, b) => a - b);
   return {
-    n: ratings.length,
+    n: valid.length,
     mean: mean(sortedScores),
+    trimmedMean: trimmedMean(sortedScores, trimRatio),
     median: median(sortedScores),
-    highest: extreme(ratings, highestScore),
-    lowest: extreme(ratings, lowestScore),
+    stdDev: sampleStdDev(sortedScores),
+    highest: extreme(valid, sortedScores[sortedScores.length - 1] ?? 0),
+    lowest: extreme(valid, sortedScores[0] ?? 0),
+    histogram: histogram(sortedScores),
+    ...counts,
   };
 }

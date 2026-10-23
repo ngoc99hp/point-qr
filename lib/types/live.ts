@@ -1,5 +1,6 @@
 // Client-safe response types (no server or Prisma imports).
 import type { GroupStats } from "@/lib/stats";
+import type { RatingFlag } from "@/lib/types/rating";
 
 export type GroupRoundStatus = "NONE" | "OPEN" | "CLOSED";
 
@@ -11,7 +12,14 @@ export interface LiveGroup {
   validCount: number;
 }
 
-/** GET /api/events/[id]/live (SPEC §7). Stats are the P1 subset (SPEC §14 P1). */
+export interface LiveRating {
+  studentCode: string;
+  studentName: string;
+  score: number;
+  flags: RatingFlag[];
+}
+
+/** GET /api/events/[id]/live (SPEC §7). */
 export interface LiveResponse {
   event: { id: string; title: string; code: string; rotatingQr: boolean; isArchived: boolean };
   groups: LiveGroup[];
@@ -21,6 +29,8 @@ export interface LiveResponse {
     groupName: string;
     openedAt: string;
     stats: GroupStats;
+    /** D3: valid ratings, highest score first, then earliest first. */
+    ratings: LiveRating[];
   };
 }
 
