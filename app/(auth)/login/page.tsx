@@ -9,15 +9,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { signIn } from "@/lib/auth";
+import { getLoginErrorMessage } from "@/lib/login-error";
 import { safeCallbackUrl } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Đăng nhập · PeerScore" };
-
-const ERROR_MESSAGES: Record<string, string> = {
-  AccessDenied:
-    "Email này không có quyền truy cập. Liên hệ quản trị viên để được cấp quyền.",
-};
-const FALLBACK_ERROR = "Đăng nhập thất bại. Vui lòng thử lại.";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -47,7 +42,7 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
 
 async function LoginForm({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const error = firstParam(params.error);
+  const errorMessage = getLoginErrorMessage(firstParam(params.error));
   const redirectTo = safeCallbackUrl(firstParam(params.callbackUrl));
 
   async function signInWithGoogle() {
@@ -57,12 +52,12 @@ async function LoginForm({ searchParams }: { searchParams: Promise<SearchParams>
 
   return (
     <form action={signInWithGoogle} className="flex flex-col gap-4">
-      {error ? (
+      {errorMessage ? (
         <p
           role="alert"
           className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
-          {ERROR_MESSAGES[error] ?? FALLBACK_ERROR}
+          {errorMessage}
         </p>
       ) : null}
       <SubmitButton size="lg" className="w-full" pendingLabel="Đang chuyển hướng…">

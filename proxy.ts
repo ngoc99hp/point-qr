@@ -34,6 +34,9 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Skip Next internals and static files (anything with a file extension).
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|.*\\.[\\w]+$).*)"],
+  // Skip Next internals and static assets only. Other dotted paths
+  // (e.g. /api/.../export.csv) still go through the default-deny check.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpe?g|gif|webp|avif|ico|txt|xml|webmanifest|woff2?)$).*)",
+  ],
 };

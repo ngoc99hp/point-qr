@@ -37,7 +37,7 @@ export function parseEnv(raw: RawEnv): Env {
   if (result.success) return result.data;
 
   const invalidKeys = [
-    ...new Set(result.error.issues.map((issue) => String(issue.path[0]))),
+    ...new Set(result.error.issues.map((issue) => issue.path.join(".") || "(root)")),
   ];
   throw new Error(
     `Invalid environment variables: ${invalidKeys.join(", ")}. See .env.example.`,

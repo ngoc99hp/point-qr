@@ -100,7 +100,7 @@ datasource db {
 ```ts
 // prisma.config.ts — CLI (migrate, deploy, studio) dùng URL DIRECT, không qua pooler
 import { existsSync } from "node:fs";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 for (const file of [".env.local", ".env"]) {
   if (existsSync(file)) process.loadEnvFile(file); // Prisma 7 không tự đọc .env; dùng API có sẵn của Node, không cần dotenv
@@ -109,7 +109,9 @@ for (const file of [".env.local", ".env"]) {
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: { path: "prisma/migrations" },
-  datasource: { url: env("DIRECT_URL") },
+  // Dùng process.env thay vì env(): env() throw khi thiếu biến, làm hỏng `prisma generate`
+  // (postinstall, build Vercel) ở môi trường không có DIRECT_URL. Lệnh migrate vẫn báo lỗi nếu thiếu.
+  datasource: { url: process.env.DIRECT_URL },
 });
 ```
 
@@ -480,7 +482,9 @@ Không có đăng nhập SV thì **không thể ngăn hoàn toàn việc chấm 
   - Bị từ chối thì chuyển về `/login?error=AccessDenied` và hiện "Email này không có quyền truy cập. Liên hệ quản trị viên để được cấp quyền."
   - Upsert `Lecturer` theo `email` trong callback `jwt` (khi có `user`, tức lúc đăng nhập). Tạo mới nếu chưa có; nếu đã có thì **cập nhật `name`** theo Google. Gán `token.lecturerId = lecturer.id`.
   - Callback `session` đưa `session.user.lecturerId`. Type được mở rộng trong `types/next-auth.d.ts` (module `next-auth` và `next-auth/jwt`), không cast `any`.
-  - Email bị gỡ khỏi allowlist chỉ mất quyền khi JWT hết hạn hoặc đăng nhập lại. Đây là giới hạn chấp nhận được ở v1.
+  - JWT session có `maxAge` 12 giờ. `requireLecturer()` (lib/auth.ts) **kiểm tra lại allowlist mỗi lần truy cập**, nên email bị gỡ khỏi allowlist sẽ mất quyền ngay ở lần truy cập tiếp theo (sau khi env được cập nhật và deploy lại).
+  - Proxy chỉ là kiểm tra lạc quan. **Mọi page, Server Action và route handler phía GV đều phải gọi `requireLecturer()`**; không được dựa vào proxy hay layout.
+  - Header bảo mật cơ bản được đặt trong `next.config.ts`: chống nhúng iframe, `nosniff`, `Referrer-Policy`, `Permissions-Policy`. CSP đầy đủ để sau.
 
 ---
 

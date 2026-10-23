@@ -5,6 +5,7 @@ import { authConfig } from "@/auth.config";
 import { isAllowedLecturer, normalizeEmail } from "@/lib/allowlist";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { LOGIN_PATH } from "@/lib/routes";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -42,13 +43,18 @@ export interface CurrentLecturer {
 }
 
 /**
- * Data-access-layer guard for lecturer pages and actions. The proxy only does an
- * optimistic check, so every protected read must go through this function.
+ * Data-access-layer guard for lecturer pages, actions and route handlers. The proxy
+ * only does an optimistic check, so every protected read must go through this.
+ * Re-checks the allowlist so removing an email revokes access immediately.
  */
 export async function requireLecturer(): Promise<CurrentLecturer> {
   const session = await auth();
   const email = session?.user.email;
-  if (!session || !email) redirect("/login");
+  if (!session || !email) redirect(LOGIN_PATH);
+  // The email was verified by Google at sign-in (signIn callback).
+  if (!isAllowedLecturer({ email, emailVerified: true }, env.ALLOWED_LECTURER_EMAILS)) {
+    redirect(`${LOGIN_PATH}?error=AccessDenied`);
+  }
 
   return {
     lecturerId: session.user.lecturerId,
