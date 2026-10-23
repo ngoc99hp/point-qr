@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupOrderFromName, parseRoster } from "./roster";
+import { groupOrderFromName, parseRoster, planNewGroups } from "./roster";
 
 const PATTERN = "^[0-9]{5,15}$";
 
@@ -82,5 +82,29 @@ describe("groupOrderFromName", () => {
 
   it("returns null when the name has no number", () => {
     expect(groupOrderFromName("Nhóm A")).toBeNull();
+  });
+});
+
+describe("planNewGroups", () => {
+  it("creates missing groups using the number in their name as order", () => {
+    expect(planNewGroups([], ["Nhóm 2", "Nhóm 1", "Nhóm 2"])).toEqual([
+      { name: "Nhóm 2", order: 2 },
+      { name: "Nhóm 1", order: 1 },
+    ]);
+  });
+
+  it("skips groups that already exist (by name)", () => {
+    expect(planNewGroups([{ name: "Nhóm 1", order: 1 }], ["Nhóm 1", "Nhóm 3"])).toEqual([
+      { name: "Nhóm 3", order: 3 },
+    ]);
+  });
+
+  it("appends after the highest order when the number is missing or already taken", () => {
+    const existing = [{ name: "Nhóm A", order: 3 }];
+    expect(planNewGroups(existing, ["Nhóm 3", "Nhóm B", "Nhóm 1"])).toEqual([
+      { name: "Nhóm 3", order: 4 },
+      { name: "Nhóm B", order: 5 },
+      { name: "Nhóm 1", order: 1 },
+    ]);
   });
 });

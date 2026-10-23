@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { decimalToNumber } from "@/lib/mappers";
 import { ArchiveButton } from "./archive-button";
 import { GroupManager } from "./group-manager";
+import { RosterImport } from "./roster-import";
 import { SettingsForm } from "./settings-form";
 
 export const metadata: Metadata = { title: "Thiết lập buổi đánh giá · PeerScore" };
@@ -34,16 +35,37 @@ async function loadEvent(lecturerId: string, eventId: string) {
       maxScore: true,
       scoreStep: true,
       studentCodePattern: true,
+      rankingMetric: true,
+      trimRatio: true,
+      strictRoster: true,
+      students: { select: { code: true } },
       groups: {
         orderBy: { order: "asc" },
         select: {
           id: true,
           name: true,
+          _count: { select: { students: true } },
           round: { select: { status: true, _count: { select: { ratings: true } } } },
         },
       },
     },
   });
+}
+
+type LoadedEvent = NonNullable<Awaited<ReturnType<typeof loadEvent>>>;
+
+function settingsValues(event: LoadedEvent) {
+  return {
+    eventId: event.id,
+    title: event.title,
+    minScore: decimalToNumber(event.minScore),
+    maxScore: decimalToNumber(event.maxScore),
+    scoreStep: decimalToNumber(event.scoreStep),
+    studentCodePattern: event.studentCodePattern,
+    rankingMetric: event.rankingMetric,
+    trimRatio: decimalToNumber(event.trimRatio),
+    strictRoster: event.strictRoster,
+  };
 }
 
 async function EventSetup({ params }: { params: Promise<{ id: string }> }) {
@@ -57,38 +79,29 @@ async function EventSetup({ params }: { params: Promise<{ id: string }> }) {
     name: group.name,
     roundStatus: group.round?.status ?? ("NONE" as const),
     ratingCount: group.round?._count.ratings ?? 0,
+    studentCount: group._count.students,
   }));
+  const hasRatings = groups.some((group) => group.ratingCount > 0);
+  const hasOpenRound = groups.some((group) => group.roundStatus === "OPEN");
+  const isMissingRoster = event.students.length === 0 && event.strictRoster;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <Link href="/events" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Tất cả buổi đánh giá
-          </Link>
-          <h1 className="text-3xl font-semibold tracking-tight">{event.title}</h1>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span>
-              Mã <span className="font-mono text-base font-semibold text-foreground">{event.code}</span>
-            </span>
-            {isArchived ? <Badge variant="secondary">Đã lưu trữ</Badge> : null}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <ArchiveButton eventId={event.id} isArchived={isArchived} />
-          {!isArchived ? (
-            <Link href={`/events/${event.id}/live`} className={buttonVariants({ size: "default" })}>
-              Mở màn chiếu
-            </Link>
-          ) : null}
-        </div>
-      </div>
+      <EventHeader event={event} isArchived={isArchived} />
+
+      {isMissingRoster ? (
+        <p role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          Chưa có danh sách lớp — sinh viên sẽ không gửi được phiếu. Hãy nhập danh sách ở bên dưới.
+        </p>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <Card>
           <CardHeader>
             <CardTitle>Nhóm thuyết trình</CardTitle>
-            <CardDescription>Thứ tự ở đây là thứ tự bấm &quot;Nhóm tiếp&quot; trên màn chiếu.</CardDescription>
+            <CardDescription>
+              {event.students.length} sinh viên. Thứ tự ở đây là thứ tự bấm &quot;Nhóm tiếp&quot; trên màn chiếu.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <GroupManager eventId={event.id} groups={groups} disabled={isArchived} />
@@ -96,23 +109,61 @@ async function EventSetup({ params }: { params: Promise<{ id: string }> }) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Cấu hình chấm điểm</CardTitle>
-            <CardDescription>MSV được chuyển thành chữ in hoa trước khi kiểm tra định dạng.</CardDescription>
+            <CardTitle>Danh sách lớp</CardTitle>
+            <CardDescription>Nhóm chưa có sẽ được tạo tự động theo cột &quot;Nhóm&quot;.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SettingsForm
+            <RosterImport
+              eventId={event.id}
+              studentCodePattern={event.studentCodePattern}
+              existingCodes={event.students.map((student) => student.code)}
+              canReplace={!hasRatings && !hasOpenRound}
               disabled={isArchived}
-              values={{
-                eventId: event.id,
-                title: event.title,
-                minScore: decimalToNumber(event.minScore),
-                maxScore: decimalToNumber(event.maxScore),
-                scoreStep: decimalToNumber(event.scoreStep),
-                studentCodePattern: event.studentCodePattern,
-              }}
             />
           </CardContent>
         </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cấu hình chấm điểm</CardTitle>
+          <CardDescription>
+            Thang điểm và định dạng MSV bị khóa khi đã có phiếu chấm. Xếp hạng và tỷ lệ cắt đổi được bất cứ lúc nào.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SettingsForm disabled={isArchived} values={settingsValues(event)} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function EventHeader({ event, isArchived }: { event: LoadedEvent; isArchived: boolean }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-1">
+        <Link href="/events" className="text-sm text-muted-foreground hover:text-foreground">
+          ← Tất cả buổi đánh giá
+        </Link>
+        <h1 className="text-3xl font-semibold tracking-tight">{event.title}</h1>
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <span>
+            Mã <span className="font-mono text-base font-semibold text-foreground">{event.code}</span>
+          </span>
+          {isArchived ? <Badge variant="secondary">Đã lưu trữ</Badge> : null}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <ArchiveButton eventId={event.id} isArchived={isArchived} />
+        <Link href={`/events/${event.id}/results`} className={buttonVariants({ variant: "outline" })}>
+          Kết quả
+        </Link>
+        {!isArchived ? (
+          <Link href={`/events/${event.id}/live`} className={buttonVariants()}>
+            Mở màn chiếu
+          </Link>
+        ) : null}
       </div>
     </div>
   );

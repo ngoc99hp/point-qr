@@ -14,6 +14,7 @@ export interface ManagedGroup {
   name: string;
   roundStatus: GroupRoundStatus;
   ratingCount: number;
+  studentCount: number;
 }
 
 const STATUS_LABEL: Record<GroupRoundStatus, string> = {
@@ -79,7 +80,10 @@ function GroupRow({ group, isFirst, isLast, isLocked, onMove, onDelete, onRename
   return (
     <li className="flex flex-wrap items-center gap-2 px-3 py-2">
       {draft === null ? (
-        <span className="min-w-0 flex-1 truncate font-medium">{group.name}</span>
+        <span className="min-w-0 flex-1 truncate">
+          <span className="font-medium">{group.name}</span>
+          <span className="ml-2 text-sm text-muted-foreground">{group.studentCount} SV</span>
+        </span>
       ) : (
         <form
           className="flex min-w-0 flex-1 items-center gap-2"

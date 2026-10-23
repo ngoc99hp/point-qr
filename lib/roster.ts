@@ -133,3 +133,40 @@ export function groupOrderFromName(name: string): number | null {
   const match = name.match(/\d+/);
   return match ? Number.parseInt(match[0], 10) : null;
 }
+
+export interface PlannedGroup {
+  name: string;
+  order: number;
+}
+
+/**
+ * Groups to create for an import (SPEC §6.4). First pass: a group takes the
+ * number in its name when that order is free. Second pass: the rest go after
+ * the highest order. Result keeps the input order of first appearance.
+ */
+export function planNewGroups(
+  existing: readonly PlannedGroup[],
+  groupNames: readonly string[],
+): PlannedGroup[] {
+  const existingNames = new Set(existing.map((group) => group.name));
+  const names = [...new Set(groupNames)].filter((name) => !existingNames.has(name));
+  const takenOrders = new Set(existing.map((group) => group.order));
+
+  const preferred = new Map<string, number>();
+  for (const name of names) {
+    const order = groupOrderFromName(name);
+    if (order !== null && order > 0 && !takenOrders.has(order)) {
+      preferred.set(name, order);
+      takenOrders.add(order);
+    }
+  }
+
+  let next = Math.max(0, ...takenOrders) + 1;
+  return names.map((name) => {
+    const order = preferred.get(name);
+    if (order !== undefined) return { name, order };
+    const assigned = next;
+    next += 1;
+    return { name, order: assigned };
+  });
+}

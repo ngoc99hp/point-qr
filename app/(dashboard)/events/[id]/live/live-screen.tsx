@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { QueryProvider } from "@/components/query-provider";
 import { LOGIN_PATH } from "@/lib/routes";
 import type { LiveResponse } from "@/lib/types/live";
-import { LiveStats } from "./live-stats";
+import { LiveSummary, RaterList } from "./live-stats";
 import { QrCode } from "./qr-code";
 import { RoundControls } from "./round-controls";
 
@@ -86,7 +86,10 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
         </section>
         <section aria-label="Thống kê" className="flex flex-col gap-6">
           {data.current ? (
-            <LiveStats stats={data.current.stats} />
+            <>
+              <LiveSummary stats={data.current.stats} />
+              <RaterList ratings={data.current.ratings} />
+            </>
           ) : (
             <p className="rounded-xl border border-dashed p-8 text-center text-xl text-muted-foreground">
               Chọn nhóm rồi bấm &quot;Mở chấm&quot; để sinh viên bắt đầu gửi điểm.

@@ -6,6 +6,7 @@ export const STUDENT_CODE_PATTERN_MAX = 100;
 export const SCORE_STEPS = [0.1, 0.5, 1] as const;
 export const SCORE_LIMIT_MIN = 0;
 export const SCORE_LIMIT_MAX = 10;
+export const TRIM_RATIO_MAX = 0.4;
 
 const id = z.string().min(1).max(64);
 
@@ -44,6 +45,13 @@ export const eventSettingsSchema = z
       .refine(isSafeStudentCodePattern, {
         message: "Định dạng MSV không hợp lệ hoặc quá phức tạp (không dùng nhóm lặp lồng nhau, lookaround).",
       }),
+    // P2: display-only settings, editable at any time (SPEC §6.4).
+    rankingMetric: z.enum(["MEAN", "TRIMMED_MEAN", "MEDIAN"]),
+    trimRatio: z.coerce
+      .number({ error: "Vui lòng nhập số." })
+      .min(0, "Tối thiểu 0.")
+      .max(TRIM_RATIO_MAX, `Tối đa ${TRIM_RATIO_MAX}.`),
+    strictRoster: z.boolean(),
   })
   .refine((value) => value.minScore < value.maxScore, {
     message: "Điểm tối đa phải lớn hơn điểm tối thiểu.",

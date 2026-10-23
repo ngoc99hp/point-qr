@@ -1,12 +1,15 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { z } from "zod";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireLecturer } from "@/lib/auth";
 import { findOwnedEvent, findOwnedGroup } from "@/lib/data/ownership";
+import { writeRoster, type ImportMode, type ImportSummary } from "@/lib/data/roster-import";
 import { db } from "@/lib/db";
 import { nextGroupName } from "@/lib/groups";
 import { isUniqueViolation } from "@/lib/prisma-errors";
+import { parseRoster } from "@/lib/roster";
 import {
   eventIdSchema,
   groupIdSchema,
@@ -14,12 +17,13 @@ import {
   renameGroupSchema,
 } from "@/lib/validations/event";
 
-// P1: manual group management only. Roster import (importRoster) arrives in P2.
+// Manual group management (P1) and roster import (P2, SPEC §6.4).
 
 const INVALID = "Dữ liệu không hợp lệ.";
 const GROUP_NOT_FOUND = "Không tìm thấy nhóm.";
 const DUPLICATE_NAME = "Tên nhóm đã tồn tại trong buổi đánh giá này.";
 const MAX_ADD_ATTEMPTS = 3;
+const MAX_ROSTER_TEXT = 200_000;
 const ARCHIVED = "Buổi đánh giá đã lưu trữ. Khôi phục để chỉnh sửa nhóm.";
 
 export async function addGroup(eventIdInput: string): Promise<ActionResult> {
@@ -125,4 +129,48 @@ export async function deleteGroup(groupIdInput: string): Promise<ActionResult> {
   await db.group.delete({ where: { id: group.id }, select: { id: true } });
   refresh();
   return ok(undefined);
+}
+
+const importRosterSchema = z.object({
+  eventId: z.string().min(1).max(64),
+  text: z.string().max(MAX_ROSTER_TEXT, "Dữ liệu quá lớn (tối đa khoảng 2.000 dòng)."),
+  mode: z.enum(["replace", "append"]),
+});
+
+/** Imports a pasted TSV/CSV roster after re-parsing and re-validating it on the server. */
+export async function importRoster(
+  eventIdInput: string,
+  text: string,
+  mode: ImportMode,
+): Promise<ActionResult<ImportSummary>> {
+  const { lecturerId } = await requireLecturer();
+  const parsed = importRosterSchema.safeParse({ eventId: eventIdInput, text, mode });
+  if (!parsed.success) return fail("VALIDATION", parsed.error.issues[0]?.message ?? INVALID);
+
+  const event = await db.event.findFirst({
+    where: { id: parsed.data.eventId, ownerId: lecturerId },
+    select: { id: true, status: true, studentCodePattern: true },
+  });
+  if (!event) return fail("NOT_FOUND", "Không tìm thấy buổi đánh giá.");
+  if (event.status === "ARCHIVED") return fail("EVENT_ARCHIVED", ARCHIVED);
+
+  const roster = parseRoster(parsed.data.text, event.studentCodePattern);
+  if (roster.errors.length > 0) {
+    return fail("VALIDATION", `Có ${roster.errors.length} dòng lỗi. Sửa lại rồi nhập lại.`);
+  }
+  if (roster.rows.length === 0) return fail("VALIDATION", "Không có dòng dữ liệu nào.");
+
+  if (parsed.data.mode === "replace") {
+    const [ratings, openRounds] = await Promise.all([
+      db.rating.count({ where: { round: { eventId: event.id } }, take: 1 }),
+      db.round.count({ where: { eventId: event.id, status: "OPEN" }, take: 1 }),
+    ]);
+    if (ratings > 0 || openRounds > 0) {
+      return fail("HAS_RATINGS", "Buổi đánh giá đã có phiếu hoặc đang mở phiên chấm, không thể thay thế toàn bộ. Hãy dùng chế độ bổ sung.");
+    }
+  }
+
+  const summary = await writeRoster(event.id, roster.rows, parsed.data.mode);
+  refresh();
+  return ok(summary);
 }

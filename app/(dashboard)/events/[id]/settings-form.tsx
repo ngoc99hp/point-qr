@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionResult } from "@/lib/action-result";
-import { EVENT_TITLE_MAX, SCORE_STEPS, STUDENT_CODE_PATTERN_MAX } from "@/lib/validations/event";
+import { RANKING_METRIC_LABEL, type RankingMetric } from "@/lib/types/rating";
+import {
+  EVENT_TITLE_MAX,
+  SCORE_STEPS,
+  STUDENT_CODE_PATTERN_MAX,
+  TRIM_RATIO_MAX,
+} from "@/lib/validations/event";
 
 export interface EventSettingsValues {
   eventId: string;
@@ -17,7 +23,13 @@ export interface EventSettingsValues {
   maxScore: number;
   scoreStep: number;
   studentCodePattern: string;
+  rankingMetric: RankingMetric;
+  trimRatio: number;
+  strictRoster: boolean;
 }
+
+const SELECT_CLASS =
+  "h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50";
 
 export function SettingsForm({ values, disabled }: { values: EventSettingsValues; disabled: boolean }) {
   const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
@@ -57,7 +69,7 @@ export function SettingsForm({ values, disabled }: { values: EventSettingsValues
             id="scoreStep"
             name="scoreStep"
             defaultValue={String(values.scoreStep)}
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50"
+            className={SELECT_CLASS}
           >
             {SCORE_STEPS.map((step) => (
               <option key={step} value={String(step)}>
@@ -79,6 +91,30 @@ export function SettingsForm({ values, disabled }: { values: EventSettingsValues
           />
           <FieldError id="studentCodePattern-error" message={fieldError("studentCodePattern")} />
         </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="rankingMetric">Xếp hạng nhóm theo</Label>
+          <select id="rankingMetric" name="rankingMetric" defaultValue={values.rankingMetric} className={SELECT_CLASS}>
+            {(Object.keys(RANKING_METRIC_LABEL) as RankingMetric[]).map((metric) => (
+              <option key={metric} value={metric}>
+                {RANKING_METRIC_LABEL[metric]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="trimRatio">Tỷ lệ cắt mỗi đầu (TB cắt)</Label>
+          <Input id="trimRatio" name="trimRatio" type="number" inputMode="decimal" step="0.05" min={0} max={TRIM_RATIO_MAX} defaultValue={values.trimRatio} required />
+          <FieldError id="trimRatio-error" message={fieldError("trimRatio")} />
+        </div>
+        <label className="flex items-start gap-3 text-sm sm:col-span-2">
+          <input type="checkbox" name="strictRoster" defaultChecked={values.strictRoster} className="mt-0.5 size-4" />
+          <span>
+            <span className="font-medium">Chỉ nhận MSV có trong danh sách lớp</span>
+            <span className="block text-muted-foreground">
+              Bỏ chọn để nhận cả MSV ngoài danh sách (phiếu sẽ được gắn cờ &quot;Ngoài danh sách&quot;).
+            </span>
+          </span>
+        </label>
         <div className="flex items-center gap-3 sm:col-span-2">
           <Button type="submit">{isPending ? "Đang lưu…" : "Lưu cấu hình"}</Button>
           {formError ? <p role="alert" className="text-sm text-destructive">{formError}</p> : null}

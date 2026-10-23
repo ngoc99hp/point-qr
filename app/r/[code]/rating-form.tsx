@@ -17,6 +17,7 @@ import {
 } from "@/lib/student-storage";
 import type { PublicCurrentResponse } from "@/lib/types/live";
 import { ScoreGrid } from "./score-grid";
+import { useStudentCodeCheck } from "./use-student-code-check";
 
 const POLL_CURRENT_MS = 3_000;
 const subscribeNoop = () => () => {};
@@ -77,6 +78,7 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
   const setErrors = (next: FieldErrors) => setErrorState({ roundId, errors: next });
   const setScore = (next: number) => roundId && setSelection({ roundId, score: next });
 
+  const codeCheck = useStudentCodeCheck(eventCode, roundId, studentCode);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -125,6 +127,8 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
   }
 
   const alreadySent = submitted && submitted.roundId === roundId ? submitted : null;
+  // D4: server-side submit errors win; otherwise show the live roster hint.
+  const studentCodeError = errors.studentCode ?? codeCheck.hint;
 
   return (
     <div className="flex flex-col gap-6">
@@ -154,15 +158,15 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
               id="studentCode"
               value={studentCode}
               onChange={(e) => setCodeDraft(e.target.value)}
-              inputMode="text"
-              autoCapitalize="characters"
+              onBlur={codeCheck.checkNow}
+              inputMode="numeric"
               autoComplete="off"
-              className="h-12 text-lg uppercase"
-              aria-invalid={Boolean(errors.studentCode)}
-              aria-describedby={errors.studentCode ? "studentCode-error" : undefined}
+              className="h-12 text-lg tabular-nums"
+              aria-invalid={Boolean(studentCodeError)}
+              aria-describedby={studentCodeError ? "studentCode-error" : undefined}
               disabled={isPending}
             />
-            <FieldError id="studentCode-error" message={errors.studentCode} />
+            <FieldError id="studentCode-error" message={studentCodeError} />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="studentName">Họ và tên</Label>

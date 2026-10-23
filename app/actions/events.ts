@@ -53,7 +53,7 @@ export async function createEvent(
   redirect(`/events/${eventId}`);
 }
 
-type ScoringRules = Omit<EventSettingsInput, "eventId" | "title">;
+type ScoringRules = Pick<EventSettingsInput, "minScore" | "maxScore" | "scoreStep" | "studentCodePattern">;
 
 /**
  * Existing ratings were validated against the current rules (BR-04/05), so the
@@ -88,6 +88,9 @@ export async function updateEventSettings(
     maxScore: readFormString(formData, "maxScore"),
     scoreStep: readFormString(formData, "scoreStep"),
     studentCodePattern: readFormString(formData, "studentCodePattern"),
+    rankingMetric: readFormString(formData, "rankingMetric"),
+    trimRatio: readFormString(formData, "trimRatio"),
+    strictRoster: formData.get("strictRoster") === "on",
   });
   if (!parsed.success) return firstIssue(parsed.error);
 
