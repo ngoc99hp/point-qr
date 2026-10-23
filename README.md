@@ -1,7 +1,9 @@
 # PeerScore
 
 PeerScore cho sinh viên chấm điểm phần thuyết trình của nhóm bạn bằng cách quét mã QR. Giảng viên xem kết quả theo thời gian thực trên màn chiếu.
-Đặc tả đầy đủ nằm trong [SPEC.md](SPEC.md). Trạng thái hiện tại: **P1, MVP dùng được trên lớp**. Đã có: tạo buổi đánh giá, quản lý nhóm thủ công, mở/đóng phiên chấm, QR tĩnh, form chấm cho sinh viên và màn chiếu realtime. Còn ở các phase sau: roster, gắn cờ, trang kết quả/CSV (P2); QR xoay vòng, ticket, rate limit (P3).
+Đặc tả đầy đủ nằm trong [SPEC.md](SPEC.md). Trạng thái hiện tại: **P2 đã xong.**
+- Đã có: tạo buổi đánh giá, nhập danh sách lớp kèm nhóm, mở/đóng phiên chấm, QR tĩnh, form chấm cho sinh viên (kiểm tra MSV ngay khi nhập), màn chiếu realtime (điểm trung bình kèm danh sách người chấm), gắn cờ và tự loại phiếu nghi vấn, trang kết quả kèm xếp hạng và xuất CSV.
+- Còn lại: QR xoay vòng, ticket, rate limit (P3); dark mode, toàn màn hình, E2E/load test (P4).
 
 **Stack:**
 - Next.js 16 (App Router, Cache Components), TypeScript 5.9 strict
@@ -64,11 +66,22 @@ Lấy connection string trên Neon: **Dashboard → Connect**, chọn region `aw
 
 1. Đăng nhập tại `/login` bằng tài khoản admin.
 2. Vào **Buổi đánh giá** và tạo một buổi mới. Mỗi buổi có một mã 6 ký tự.
-3. Ở trang thiết lập, thêm các nhóm ("Nhóm 1", "Nhóm 2", …), đổi tên hoặc sắp xếp lại nếu cần, và chỉnh bước điểm hay định dạng MSV.
+3. Ở trang thiết lập, mục **Danh sách lớp**, dán bảng từ Excel gồm 3 cột `MSV | Họ tên | Nhóm` (có dòng tiêu đề), hoặc chọn file CSV.
+   - Xem trước để kiểm tra lỗi từng dòng, rồi bấm **Xác nhận nhập danh sách**.
+   - Nhóm được tạo tự động và xếp theo số trong tên nhóm.
+   - Nếu cần, chỉnh bước điểm, độ dài MSV (mặc định 5–15 chữ số) và chỉ số xếp hạng.
 4. Bấm **Mở màn chiếu** rồi chiếu trang này lên. Sinh viên quét mã QR, mở `/r/<mã>`.
 5. Khi một nhóm trình bày xong, chọn nhóm đó rồi bấm **Mở chấm**, hoặc bấm **Nhóm tiếp →**. Mở nhóm mới sẽ tự đóng nhóm đang mở.
-6. Sinh viên nhập MSV, họ tên, chọn điểm rồi gửi. Gửi lại khi phiên còn mở thì điểm cũ được cập nhật. Trang sinh viên tự chuyển sang nhóm mới.
-7. Bấm **Đóng** khi kết thúc.
+6. Sinh viên nhập MSV, họ tên, chọn điểm rồi gửi.
+   - Trang báo ngay nếu MSV không có trong danh sách hoặc sinh viên đang chấm chính nhóm mình.
+   - Gửi lại khi phiên còn mở thì điểm cũ được cập nhật.
+   - Màn chiếu hiện điểm trung bình và danh sách người đã chấm, xếp từ cao đến thấp.
+7. Bấm **Đóng** khi kết thúc. Vào **Kết quả** để xem bảng xếp hạng, rà soát phiếu có cờ, loại hoặc khôi phục phiếu, và tải CSV (mở được bằng Excel, hiển thị đúng tiếng Việt).
+
+Các cờ trên phiếu:
+- **Sai tên**: họ tên nhập vào khác tên trong danh sách. So sánh không phân biệt dấu.
+- **Trùng thiết bị**: một điện thoại gửi phiếu cho nhiều MSV. Phiếu này **tự bị loại**.
+- **Ngoài danh sách**: chỉ xuất hiện khi bạn tắt "Chỉ nhận MSV có trong danh sách lớp".
 
 Lưu ý:
 - QR trỏ tới `NEXT_PUBLIC_APP_URL`, nên giá trị này phải là địa chỉ **điện thoại truy cập được**. `localhost` chỉ dùng được trên chính máy đang chạy app.
@@ -79,6 +92,7 @@ Lưu ý:
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
+pnpm test:integration   # chạy trên DB Neon trong .env.local, tự tạo và tự xóa dữ liệu [TEST]
 ```
 
 ## Deploy lên Vercel
@@ -100,13 +114,17 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 app/(auth)/login               đăng nhập admin (form + Server Action)
 app/(dashboard)/events         danh sách và tạo buổi đánh giá
 app/(dashboard)/events/[id]    thiết lập: cấu hình, nhóm, lưu trữ
-app/(dashboard)/events/[id]/live  màn chiếu: QR, điều khiển phiên, thống kê (polling)
+app/(dashboard)/events/[id]/live  màn chiếu: QR, điểm TB + danh sách người chấm, điều khiển phiên
+app/(dashboard)/events/[id]/results  xếp hạng, rà soát/loại phiếu, xuất CSV
+app/api/events/[id]/export     GET ?type=summary|raw → CSV UTF-8 có BOM
 app/r/[code]                   form chấm của sinh viên (public, mobile-first)
 app/actions/                   Server Actions: events, roster (nhóm), rounds, ratings
 app/api/events/[id]/live       GET snapshot cho màn chiếu (cần đăng nhập)
 app/api/public/events/[code]/current  GET nhóm đang mở (public)
 lib/data/                      truy vấn có lọc ownerId, snapshot live, dữ liệu public
-lib/stats.ts, score.ts, normalize.ts, event-code.ts   hàm thuần, có unit test
+lib/stats.ts, score.ts, normalize.ts, roster.ts, ranking.ts, csv.ts, rating-rules.ts   hàm thuần, có unit test
+lib/ratings/                   lõi submitRating / checkStudentCode (có integration test)
+tests/integration/             test chạy trên DB thật, tự dọn dữ liệu
 lib/auth.ts                    Auth.js (Credentials admin), requireLecturer()
 lib/db.ts, lib/env.ts          Prisma singleton (Neon adapter), validate env
 proxy.ts                       bảo vệ route (Next 16 thay middleware.ts)

@@ -38,4 +38,8 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 - **Public pages** that read no cookies call `await connection()` before DB access (Cache Components).
 - **Client-safe types** for API payloads live in `lib/types/`; never import Prisma or `lib/env` into client components.
 - **Polling:** TanStack Query only on the live screen (2s open / 10s idle) and the student page (3s), via `components/query-provider.tsx`.
-- Tests live next to the code as `*.test.ts` (Vitest, node environment, `@/` alias).
+- Tests live next to the code as `*.test.ts` (Vitest, node environment, `@/` alias). `pnpm test` = unit only (no DB).
+- **Integration tests** (`tests/integration/`, `pnpm test:integration`) run against the **main Neon DB** (owner decision D11). Every file creates a throwaway `Lecturer` (`…@test.invalid`) and deletes it in `afterAll` (cascade). Never touch rows the test did not create.
+- **Business logic that needs the DB** lives in `lib/ratings/` / `lib/data/` (no `next/headers`), so it can be integration-tested; Server Actions are thin wrappers.
+- **Owner decisions D1–D11 are settled** (SPEC §16): numeric student codes, projector = QR | mean + rater list, instant roster check, auto-exclude multi-student devices, no login rate limit.
+- **Scripted edits:** never use `String.replace` with a string replacement containing `$` (`` $` `` / `$'` / `$&` are special); use the Edit tool or a function replacement.
