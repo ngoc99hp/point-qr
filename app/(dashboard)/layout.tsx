@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { AccountMenu } from "@/components/account-menu";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function DashboardLayout({ children }: LayoutProps<"/">) {
   return (
@@ -10,9 +11,12 @@ export default function DashboardLayout({ children }: LayoutProps<"/">) {
           <Link href="/events" className="font-semibold tracking-tight">
             PeerScore
           </Link>
-          <Suspense fallback={<div className="h-8 w-24 rounded-md bg-muted" />}>
-            <AccountMenu />
-          </Suspense>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Suspense fallback={<div className="h-8 w-24 rounded-md bg-muted" />}>
+              <AccountMenu />
+            </Suspense>
+          </div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>

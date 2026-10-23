@@ -1,14 +1,19 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Maximize, Minimize } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { QueryProvider } from "@/components/query-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { LOGIN_PATH } from "@/lib/routes";
 import type { LiveResponse } from "@/lib/types/live";
+import { cn } from "@/lib/utils";
 import { LiveSummary, RaterList } from "./live-stats";
 import { QrCode } from "./qr-code";
 import { RoundControls } from "./round-controls";
+import { useFullscreen } from "./use-fullscreen";
 import { useQrValue } from "./use-qr-value";
 
 const POLL_OPEN_MS = 2_000;
@@ -16,7 +21,7 @@ const POLL_IDLE_MS = 10_000;
 
 interface LiveScreenProps {
   eventId: string;
-  /** Absolute student URL encoded in the static QR (P1). */
+  /** Absolute student URL (the QR adds `?t=` when rotating). */
   studentUrl: string;
 }
 
@@ -42,6 +47,8 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
   const queryKey = ["live", eventId];
   const router = useRouter();
   const pathname = usePathname();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(rootRef);
   const { data, isError, error } = useQuery({
     queryKey,
     queryFn: () => fetchLive(eventId),
@@ -50,7 +57,6 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
     refetchIntervalInBackground: false,
     retry: (failureCount, queryError) => !(queryError instanceof UnauthorizedError) && failureCount < 1,
   });
-
   const qrValue = useQrValue({
     eventId,
     studentUrl,
@@ -65,29 +71,58 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
     }
   }, [error, router, pathname]);
 
-  if (!data) {
-    return (
-      <p className="text-muted-foreground">
-        {isError ? "Không tải được dữ liệu. Đang thử lại…" : "Đang tải…"}
-      </p>
-    );
-  }
-
-  const displayUrl = studentUrl.replace(/^https?:\/\//, "");
-
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div ref={rootRef} className={cn("flex flex-col gap-6", fullscreen.isFullscreen && "overflow-auto bg-background p-6 md:p-10")}>
+      {data ? (
+        <LiveBoard
+          data={data}
+          qrValue={qrValue}
+          studentUrl={studentUrl}
+          isOffline={isError}
+          fullscreen={fullscreen}
+          onChanged={() => queryClient.invalidateQueries({ queryKey })}
+        />
+      ) : (
+        <p className="text-muted-foreground">{isError ? "Không tải được dữ liệu. Đang thử lại…" : "Đang tải…"}</p>
+      )}
+    </div>
+  );
+}
+
+interface LiveBoardProps {
+  data: LiveResponse;
+  qrValue: string | null;
+  studentUrl: string;
+  isOffline: boolean;
+  fullscreen: ReturnType<typeof useFullscreen>;
+  onChanged: () => void;
+}
+
+/** D3 layout: QR left; mean + rater list right; controls below. */
+function LiveBoard({ data, qrValue, studentUrl, isOffline, fullscreen, onChanged }: LiveBoardProps) {
+  const displayUrl = studentUrl.replace(/^https?:\/\//, "");
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{data.event.title}</h1>
-          <p className="text-4xl font-bold md:text-5xl" aria-live="polite">
+          <h1 className="text-2xl font-semibold tracking-tight text-muted-foreground">{data.event.title}</h1>
+          <p className="text-4xl font-bold md:text-6xl" aria-live="polite">
             {data.current ? `Đang chấm: ${data.current.groupName}` : "Chưa mở phiên chấm"}
           </p>
         </div>
-        {isError ? <p className="text-sm text-destructive">Mất kết nối, đang thử lại…</p> : null}
+        <div className="flex items-center gap-2">
+          {isOffline ? <p className="text-sm text-destructive">Mất kết nối, đang thử lại…</p> : null}
+          <ThemeToggle />
+          {fullscreen.isSupported ? (
+            <Button variant="outline" onClick={fullscreen.toggle}>
+              {fullscreen.isFullscreen ? <Minimize aria-hidden /> : <Maximize aria-hidden />}
+              {fullscreen.isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <section aria-label="Mã QR" className="flex flex-col items-center gap-3">
           {qrValue ? (
             <QrCode value={qrValue} label={`Mã QR dẫn tới ${displayUrl}`} />
@@ -98,12 +133,10 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
           )}
           <p className="break-all text-center font-mono text-xl md:text-2xl">{displayUrl}</p>
           {data.event.rotatingQr ? (
-            <p className="text-center text-sm text-muted-foreground">
-              Mã QR tự đổi mỗi 30 giây — sinh viên cần quét trực tiếp tại lớp.
-            </p>
+            <p className="text-center text-sm text-muted-foreground">Mã QR tự đổi mỗi 30 giây — hãy quét trực tiếp tại lớp.</p>
           ) : null}
         </section>
-        <section aria-label="Thống kê" className="flex flex-col gap-6">
+        <section aria-label="Thống kê" className="flex min-w-0 flex-col gap-6">
           {data.current ? (
             <>
               <LiveSummary stats={data.current.stats} />
@@ -118,8 +151,8 @@ function LiveScreenContent({ eventId, studentUrl }: LiveScreenProps) {
       </div>
 
       <section aria-label="Điều khiển" className="border-t pt-4">
-        <RoundControls snapshot={data} onChanged={() => queryClient.invalidateQueries({ queryKey })} />
+        <RoundControls snapshot={data} onChanged={onChanged} />
       </section>
-    </div>
+    </>
   );
 }
