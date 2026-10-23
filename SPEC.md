@@ -685,6 +685,26 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 
 ### P4: Hoàn thiện
 - Dark mode, toàn màn hình, tối ưu UI màn chiếu (bỏ `hideRaterNamesOnProjector` theo D6), CSP đầy đủ.
+
+**Làm rõ phạm vi P4** (chốt 23/10/2026):
+- **Dark mode:** dùng `next-themes` (class `.dark`). Nút chuyển Hệ thống → Sáng → Tối có ở header dashboard và trên màn chiếu. Trang SV theo hệ thống.
+- **Toàn màn hình:** nút trên màn chiếu, dùng Fullscreen API trên khối màn chiếu (`Permissions-Policy: fullscreen=(self)`).
+- **CSP (T28):** **không dùng nonce**. Theo tài liệu Next 16, nonce đòi render động hoàn toàn, mâu thuẫn với phần shell tĩnh của Partial Prerender (Cache Components). CSP gồm:
+  - `default-src 'self'`; `script-src 'self' 'unsafe-inline'` (dev thêm `'unsafe-eval'`); `style-src 'self' 'unsafe-inline'`
+  - `img-src 'self' blob: data:`; `font-src 'self'`; `connect-src 'self'`
+  - `object-src 'none'`; `base-uri 'self'`; `form-action 'self'`; `frame-ancestors 'none'`
+  - Kèm HSTS. Không dùng `upgrade-insecure-requests`, vì nó làm hỏng `next start` trên http://localhost.
+- **Ticket mang `eventId` đã ký** (`e` trong payload). Gate không còn tra event theo code. Ticket của event đã bị xóa trả `TICKET_INVALID`.
+- **Trang SV nhẹ:**
+  - Dùng `<label>`/`<button>` thuần và thông báo inline (`aria-live`), không dùng radix và sonner.
+  - `<Toaster>` chỉ nằm ở layout dashboard.
+  - TanStack Query giữ lại cho polling theo §3.
+- **E2E (Playwright, `pnpm test:e2e`):** đúng kịch bản §13, đi qua UI thật trên production build và DB Neon chính. Event `[TEST] Playwright …` được xóa qua UI; `afterAll` dọn dự phòng.
+- **Load test (`pnpm load-test`, `scripts/load-test.mjs`):** 100 submit trong 20 giây, mỗi "điện thoại" một ticket. Script tự dò Server Action id từ chính site được test, nên chạy được với Vercel qua `BASE_URL`. Event `[TEST] load` tự xóa sau khi chạy.
+- **Đo được tại máy dev (Việt Nam → Neon Singapore, RTT DB ≈ 62 ms):**
+  - Load test: 100/100 phiếu được lưu, 0 lỗi 5xx; p95 ≈ 0,9–1,1 s.
+  - Lighthouse mobile `/r/[code]`: Performance 88–93, Accessibility 100, Best Practices 100.
+  - Hai chỉ tiêu cuối (p95 < 800 ms, Lighthouse ≥ 90) phải được **nghiệm thu trên Vercel `sin1`**, nơi RTT tới DB chỉ khoảng 1–3 ms.
 - E2E Playwright và load test.
 - **Nghiệm thu:** Load test đạt chỉ tiêu §13. Lighthouse mobile cho `/r/[code]` ≥ 90 Performance.
 
@@ -746,4 +766,5 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 | T25 | `studentCodePattern` (chống ReDoS) | Luôn so khớp **toàn bộ** MSV (tự bọc `^(?:…)$`). Khi lưu, từ chối nhóm lặp lồng nhau (`(a+)+`), lookaround và backreference |
 | T26 | Race giữa gửi phiếu và đóng phiên | `submitRating` khóa dòng Round bằng `SELECT … FOR SHARE` trong transaction, nên phiếu không lọt vào sau khi `closeRound`/`openRound` commit |
 | T27 | Xóa nhóm / danh sách lớp / buổi đánh giá (chủ sản phẩm yêu cầu, 23/10/2026) | **Xóa nhóm**: được cả khi đã có phiếu, sau khi xác nhận; phiếu của nhóm bị xóa theo, SV giữ lại nhưng không còn nhóm. **Xóa danh sách lớp** (`clearRoster`): xóa mọi SV của event; nhóm và phiếu giữ nguyên, phiếu mất liên kết roster. **Xóa buổi đánh giá** (`deleteEvent`): xóa vĩnh viễn kèm toàn bộ dữ liệu, phải gõ đúng mã event. Cả ba đều yêu cầu không có round `OPEN` và lọc theo `ownerId` |
+| T28 | CSP với Partial Prerender | Không dùng nonce (mâu thuẫn với shell tĩnh), CSP đặt trong `next.config.ts` theo hướng "Without Nonces" của tài liệu Next 16 (§14 P4) |
 | T23 | Trang public không đọc cookie | Gọi `await connection()` trước khi truy vấn DB (Cache Components), nếu không Next báo lỗi "unstable value" khi prerender |

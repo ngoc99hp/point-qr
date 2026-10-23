@@ -7,7 +7,11 @@ PeerScore cho sinh viên chấm điểm phần thuyết trình của nhóm bạn
   - QR xoay vòng đổi mỗi 30 giây nên sinh viên phải quét tại lớp. Có thể tắt để dùng QR cố định.
   - Ticket ký số có hạn 15 phút cho từng nhóm.
   - Mỗi điện thoại gửi tối đa 10 lần mỗi phút.
-- Còn lại: dark mode, toàn màn hình, E2E/load test (P4).
+- **P4 (hoàn thiện):**
+  - Có dark mode (nút ☀/☾ ở góc trên) và nút toàn màn hình cho màn chiếu.
+  - Có xóa nhóm, xóa danh sách lớp, xóa buổi đánh giá.
+  - CSP đầy đủ.
+  - Có E2E Playwright, load test và trang sinh viên đã được tối ưu cho điện thoại.
 
 **Stack:**
 - Next.js 16 (App Router, Cache Components), TypeScript 5.9 strict
@@ -99,7 +103,26 @@ Lưu ý:
 ```bash
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 pnpm test:integration   # chạy trên DB Neon trong .env.local, tự tạo và tự xóa dữ liệu [TEST]
+pnpm test:e2e           # build + Playwright (Chromium): một buổi học trọn vẹn qua giao diện thật
 ```
+
+Lần đầu chạy E2E cần cài trình duyệt: `pnpm exec playwright install chromium`.
+
+### Load test (100 lượt gửi trong 20 giây)
+
+```bash
+pnpm build && pnpm start                            # terminal 1 (cổng 3000)
+pnpm load-test                                      # terminal 2: thử với máy local
+BASE_URL=https://<app>.vercel.app pnpm load-test    # thử với bản deploy thật (nên dùng cách này để nghiệm thu)
+```
+
+Script tự tạo một buổi `[TEST] load` trong DB ở `.env.local` (phải là DB mà `BASE_URL` đang dùng), gửi 100 phiếu, in số phiếu được lưu, số lỗi và p50/p95, rồi xóa dữ liệu test. Chỉ tiêu: không có lỗi 5xx và p95 < 800 ms.
+
+Khi chạy từ máy ở Việt Nam, mỗi truy vấn tới Neon Singapore mất khoảng 60 ms, nên p95 đo ở local khoảng 0,9–1 s. Trên Vercel (`sin1`, cùng vùng với Neon) độ trễ này chỉ khoảng 1–3 ms.
+
+### Lighthouse cho trang sinh viên
+
+Mở `https://<app>.vercel.app/r/<mã>` bằng [PageSpeed Insights](https://pagespeed.web.dev/) và chọn chế độ Mobile. Chỉ tiêu Performance ≥ 90. Ở local mình đo được 88–93.
 
 ## Deploy lên Vercel
 
