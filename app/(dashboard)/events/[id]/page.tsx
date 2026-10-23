@@ -173,7 +173,10 @@ function EventHeader({ event, isArchived }: { event: LoadedEvent; isArchived: bo
         <h1 className="text-3xl font-semibold tracking-tight">{event.title}</h1>
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span>
-            Mã <span className="font-mono text-base font-semibold text-foreground">{event.code}</span>
+            Mã{" "}
+            <span data-testid="event-code" className="font-mono text-base font-semibold text-foreground">
+              {event.code}
+            </span>
           </span>
           {isArchived ? <Badge variant="secondary">Đã lưu trữ</Badge> : null}
         </div>

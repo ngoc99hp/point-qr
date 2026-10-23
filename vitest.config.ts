@@ -13,6 +13,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts"],
-    exclude: ["node_modules/**", ".next/**", "lib/generated/**", "tests/integration/**"],
+    exclude: ["node_modules/**", ".next/**", "lib/generated/**", "tests/integration/**", "tests/e2e/**"],
   },
 });

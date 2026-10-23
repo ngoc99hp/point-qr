@@ -1,6 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { deleteEvent } from "@/app/actions/events";
 import { clearRoster } from "@/app/actions/roster";
@@ -44,6 +45,12 @@ interface DeleteEventButtonProps {
 
 export function DeleteEventButton({ eventId, eventCode, ratingCount }: DeleteEventButtonProps) {
   const { isPending, run } = useActionRunner();
+  const router = useRouter();
+  const afterDelete = () => {
+    toast.success("Đã xóa buổi đánh giá.");
+    router.replace("/events");
+    router.refresh();
+  };
   return (
     <ConfirmDialog
       title="Xóa vĩnh viễn buổi đánh giá?"
@@ -57,7 +64,7 @@ export function DeleteEventButton({ eventId, eventCode, ratingCount }: DeleteEve
       }
       confirmLabel="Xóa vĩnh viễn"
       requireText={eventCode}
-      onConfirm={() => run(() => deleteEvent(eventId, eventCode))}
+      onConfirm={() => run(() => deleteEvent(eventId, eventCode), afterDelete)}
       trigger={
         <Button variant="destructive" disabled={isPending}>
           <Trash2 aria-hidden /> Xóa buổi đánh giá
