@@ -531,7 +531,7 @@ Không có đăng nhập SV thì **không thể ngăn hoàn toàn việc chấm 
 - Endpoint live dùng một query cho round hiện tại và một query `groupBy` để đếm phiếu theo nhóm. Không để N+1.
 - Index đã khai báo ở §4. Kiểm tra bằng `EXPLAIN` cho query live.
 - `vercel.json`: `"regions": ["sin1"]`.
-- **Migration production chạy thủ công** (`pnpm db:deploy` từ máy GV/CI với `DIRECT_URL` production). **Không** gắn `prisma migrate deploy` vào build Vercel, để tránh preview deploy migrate nhầm DB. Build Vercel chỉ cần `prisma generate`, đã có qua `postinstall`.
+- **Migration production chạy thủ công** (`pnpm db:deploy` từ máy GV/CI với `DIRECT_URL` production). **Không** gắn `prisma migrate deploy` vào build Vercel, để tránh preview deploy migrate nhầm DB. Build Vercel chỉ cần `prisma generate`. Lệnh này chạy **trong script `build`** (`prisma generate && next build`), không chỉ qua `postinstall`, vì khi Vercel dùng lại cache `node_modules` thì pnpm bỏ qua `postinstall` và `lib/generated` (gitignored) sẽ không có.
 - Scripts trong `package.json`: `dev`, `build`, `start`, `typecheck` (`tsc --noEmit`), `lint`, `test` (`vitest run`), `db:migrate` (`prisma migrate dev`), `db:deploy` (`prisma migrate deploy`), `postinstall` (`prisma generate`).
 - Log lỗi submit (mã lỗi, eventId, roundId), **không log** MSV hay tên ra console production.
 
