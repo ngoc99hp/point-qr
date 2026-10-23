@@ -4,7 +4,8 @@ export const CSV_BOM = "﻿";
 export type CsvCell = string | number | null;
 
 const NEEDS_QUOTES = /[",\r\n]/;
-const FORMULA_START = /^[=+\-@]/;
+/** OWASP CSV injection triggers, including tab/CR and whitespace-prefixed formulas. */
+const FORMULA_START = /^(?:[=+\-@\t\r]|\s+[=+\-@])/;
 
 function formatCell(cell: CsvCell): string {
   if (cell === null) return "";

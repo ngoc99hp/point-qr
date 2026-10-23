@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
+import { MANUAL_INCLUDE } from "@/lib/rating-rules";
 import { checkStudentCodeStatus } from "@/lib/ratings/check-student-code";
 import { processRating, type SaveRatingInput } from "@/lib/ratings/submit-rating";
 
@@ -145,6 +146,23 @@ describe("submitRating against the database", () => {
     });
     await processRating(input({ score: 10 }));
     expect(await storedRating(STUDENT_B1.code)).toMatchObject({ excluded: true, excludedBy: lecturerId });
+  });
+
+  it("BR-11: a rating the lecturer restored stays included even if the device flag still applies", async () => {
+    const device = randomUUID();
+    await processRating(input({ deviceId: device }));
+    await processRating(input({ deviceId: device, studentCode: STUDENT_B2.code, studentName: STUDENT_B2.name }));
+    await db.rating.updateMany({
+      where: { roundId: roundA, studentCode: STUDENT_B2.code },
+      data: { excluded: false, excludedBy: MANUAL_INCLUDE },
+    });
+
+    await processRating(input({ deviceId: device, studentCode: STUDENT_B2.code, studentName: STUDENT_B2.name, score: 6 }));
+    expect(await storedRating(STUDENT_B2.code)).toMatchObject({
+      flags: ["DEVICE_MULTI_STUDENT"],
+      excluded: false,
+      excludedBy: MANUAL_INCLUDE,
+    });
   });
 
   it("BR-03: rejects ratings once the round is closed", async () => {

@@ -27,3 +27,9 @@ describe("toCsv", () => {
     expect(toCsv(["N"], [[-1]])).toBe(`${CSV_BOM}N\r\n-1\r\n`);
   });
 });
+
+describe("toCsv formula guard (OWASP)", () => {
+  it("also guards tab, carriage return and whitespace-prefixed formulas", () => {
+    expect(toCsv(["X"], [["\t=1"], ["\r=1"], [" =1"]])).toBe(`${CSV_BOM}X\r\n'\t=1\r\n"'\r=1"\r\n' =1\r\n`);
+  });
+});

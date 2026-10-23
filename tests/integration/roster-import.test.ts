@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { writeRoster } from "@/lib/data/roster-import";
+import { RosterReplaceBlockedError, writeRoster } from "@/lib/data/roster-import";
 import { parseRoster } from "@/lib/roster";
 
 // Main Neon DB (D11): everything hangs off a throwaway Lecturer deleted in afterAll.
@@ -77,6 +77,32 @@ describe("writeRoster", () => {
     expect(students).toContainEqual(["1000001", "An Mới", "Nhóm 3"]);
     expect(students).toContainEqual(["1000004", "Dũng", "Nhóm 3"]);
     expect(students).toHaveLength(4);
+  });
+
+  it("append: updates 600 existing students across chunks in one import", async () => {
+    const header = "MSV\tHọ tên\tNhóm";
+    const make = (suffix: string) =>
+      Array.from({ length: 600 }, (_, i) => `${3000000 + i}\tSV ${i} ${suffix}\tNhóm 9`).join("\n");
+    await writeRoster(eventId, rosterOf(`${header}\n${make("cũ")}`), "append");
+    const summary = await writeRoster(eventId, rosterOf(`${header}\n${make("mới")}`), "append");
+
+    expect(summary).toMatchObject({ created: 0, updated: 600 });
+    const renamed = await db.student.count({ where: { eventId, fullName: { endsWith: "mới" } } });
+    expect(renamed).toBe(600);
+  });
+
+  it("replace: refuses inside the transaction once a rating exists, keeping the data", async () => {
+    const group = await db.group.findFirstOrThrow({ where: { eventId }, select: { id: true } });
+    const round = await db.round.create({ data: { eventId, groupId: group.id, status: "CLOSED" }, select: { id: true } });
+    await db.rating.create({
+      data: { roundId: round.id, studentCode: "1000001", studentName: "An", score: 8, deviceId: "d", ipHash: "h" },
+    });
+
+    await expect(writeRoster(eventId, rosterOf("MSV\tHọ tên\tNhóm\n9000001\tX\tNhóm X"), "replace")).rejects.toBeInstanceOf(
+      RosterReplaceBlockedError,
+    );
+    expect(await db.rating.count({ where: { roundId: round.id } })).toBe(1);
+    await db.round.delete({ where: { id: round.id } });
   });
 
   it("replace: drops the previous roster and groups entirely", async () => {

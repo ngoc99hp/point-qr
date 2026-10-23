@@ -47,3 +47,13 @@ describe("rankGroups (BR-13)", () => {
     ]);
   });
 });
+
+describe("rankGroups float tolerance", () => {
+  it("treats means that differ only by floating point noise as tied", () => {
+    const groups = [
+      group("a", { mean: (0.1 + 0.2 + 0.3) / 3 }), // 0.20000000000000004
+      group("b", { mean: 0.2 }),
+    ];
+    expect(rankGroups(groups, "MEAN").map((g) => g.rank)).toEqual([1, 1]);
+  });
+});

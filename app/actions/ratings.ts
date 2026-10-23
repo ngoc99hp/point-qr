@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { parseEventCode } from "@/lib/event-code";
 import { normalizeCode } from "@/lib/normalize";
+import { MANUAL_INCLUDE } from "@/lib/rating-rules";
 import { checkStudentCodeStatus, type StudentCodeStatus } from "@/lib/ratings/check-student-code";
 import { processRating, type SubmitRatingResult } from "@/lib/ratings/submit-rating";
 import { submitRatingSchema, type SubmitRatingInput } from "@/lib/validations/rating";
@@ -79,11 +80,17 @@ export async function setRatingExcluded(ratingId: string, excluded: boolean): Pr
   const parsed = setExcludedSchema.safeParse({ ratingId, excluded });
   if (!parsed.success) return fail("VALIDATION", "Dữ liệu không hợp lệ.");
 
+  // Restoring records MANUAL_INCLUDE so a later resubmission cannot auto-exclude it again.
   const result = await db.rating.updateMany({
-    where: { id: parsed.data.ratingId, round: { event: { ownerId: lecturerId } } },
-    data: { excluded: parsed.data.excluded, excludedBy: parsed.data.excluded ? lecturerId : null },
+    where: {
+      id: parsed.data.ratingId,
+      round: { event: { ownerId: lecturerId, status: { not: "ARCHIVED" } } },
+    },
+    data: { excluded: parsed.data.excluded, excludedBy: parsed.data.excluded ? lecturerId : MANUAL_INCLUDE },
   });
-  if (result.count === 0) return fail("NOT_FOUND", "Không tìm thấy phiếu chấm.");
+  if (result.count === 0) {
+    return fail("NOT_FOUND", "Không tìm thấy phiếu chấm, hoặc buổi đánh giá đã lưu trữ.");
+  }
   refresh();
   return ok(undefined);
 }

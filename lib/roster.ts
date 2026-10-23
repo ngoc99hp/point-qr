@@ -27,6 +27,16 @@ const HEADER_ALIASES: Record<Column, readonly string[]> = {
 };
 const COLUMN_LABEL: Record<Column, string> = { code: "MSV", fullName: "Họ tên", groupName: "Nhóm" };
 
+export const MAX_ROSTER_ROWS = 2000;
+const MAX_NAME_LENGTH = 100;
+const MAX_GROUP_NAME_LENGTH = 50;
+/** Orders above this are ignored when read from a name (Postgres int4 safety). */
+const MAX_GROUP_ORDER = 10_000;
+
+const BOM = "﻿";
+const LINE_FEED = "\n";
+const CARRIAGE_RETURN = "\r";
+
 const headerKey = (cell: string) => normalizeName(cell).replace(/[^a-z0-9]/g, "");
 const collapse = (value: string) => value.trim().replace(/\s+/g, " ");
 
@@ -37,15 +47,34 @@ function detectDelimiter(headerLine: string): string {
   return semicolons > commas ? ";" : ",";
 }
 
-/** Splits one line, honoring "quoted" cells with "" escapes (RFC 4180 style). */
-function splitLine(line: string, delimiter: string): string[] {
-  const cells: string[] = [];
+interface RosterRecord {
+  /** 1-based physical line where the record starts. */
+  line: number;
+  cells: string[];
+}
+
+/**
+ * Splits the whole text into records, honoring "quoted" cells with "" escapes and
+ * embedded newlines (RFC 4180 style; Excel pastes multi-line cells this way).
+ */
+function parseRecords(text: string, delimiter: string): RosterRecord[] {
+  const records: RosterRecord[] = [];
+  let cells: string[] = [];
   let cell = "";
   let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
+  let line = 1;
+  let recordLine = 1;
+  const endRecord = () => {
+    cells.push(cell);
+    if (cells.some((value) => value.trim() !== "")) records.push({ line: recordLine, cells });
+    cells = [];
+    cell = "";
+  };
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === LINE_FEED) line += 1;
     if (inQuotes) {
-      if (char === '"' && line[i + 1] === '"') {
+      if (char === '"' && text[i + 1] === '"') {
         cell += '"';
         i += 1;
       } else if (char === '"') {
@@ -59,12 +88,15 @@ function splitLine(line: string, delimiter: string): string[] {
     } else if (char === delimiter) {
       cells.push(cell);
       cell = "";
-    } else {
+    } else if (char === LINE_FEED) {
+      endRecord();
+      recordLine = line;
+    } else if (char !== CARRIAGE_RETURN) {
       cell += char;
     }
   }
-  cells.push(cell);
-  return cells;
+  endRecord();
+  return records;
 }
 
 function mapColumns(headers: readonly string[]): { indexes: Partial<Record<Column, number>>; missing: Column[] } {
@@ -84,35 +116,37 @@ function validateRow(row: RosterRow, pattern: string, firstLineByCode: Map<strin
   const firstLine = firstLineByCode.get(row.code);
   if (firstLine !== undefined) return `MSV trùng với dòng ${firstLine}.`;
   if (!row.fullName) return "Thiếu họ tên.";
+  if (row.fullName.length > MAX_NAME_LENGTH) return `Họ tên tối đa ${MAX_NAME_LENGTH} ký tự.`;
   if (!row.groupName) return "Thiếu nhóm.";
+  if (row.groupName.length > MAX_GROUP_NAME_LENGTH) return `Tên nhóm tối đa ${MAX_GROUP_NAME_LENGTH} ký tự.`;
   return null;
 }
 
 /** Parses pasted TSV or CSV with a header row (MSV, Họ tên, Nhóm). Line numbers are 1-based. */
 export function parseRoster(text: string, studentCodePattern: string): RosterParseResult {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
-  const headerIndex = lines.findIndex((line) => line.trim() !== "");
-  if (headerIndex === -1) {
+  const content = text.startsWith(BOM) ? text.slice(BOM.length) : text;
+  const firstLine = content.split(LINE_FEED).find((line) => line.trim() !== "");
+  if (firstLine === undefined) {
     return { rows: [], errors: [{ line: 1, message: "Chưa có dữ liệu. Dán bảng có dòng tiêu đề MSV, Họ tên, Nhóm." }] };
   }
 
-  const headerLine = lines[headerIndex] ?? "";
-  const delimiter = detectDelimiter(headerLine);
-  const { indexes, missing } = mapColumns(splitLine(headerLine, delimiter));
+  const [header, ...records] = parseRecords(content, detectDelimiter(firstLine));
+  const { indexes, missing } = mapColumns(header?.cells ?? []);
   if (missing.length > 0) {
     const labels = missing.map((column) => COLUMN_LABEL[column]).join(", ");
-    return { rows: [], errors: [{ line: headerIndex + 1, message: `Thiếu cột bắt buộc: ${labels}.` }] };
+    return { rows: [], errors: [{ line: header?.line ?? 1, message: `Thiếu cột bắt buộc: ${labels}.` }] };
+  }
+  if (records.length > MAX_ROSTER_ROWS) {
+    return { rows: [], errors: [{ line: 1, message: `Tối đa ${MAX_ROSTER_ROWS} sinh viên mỗi lần nhập.` }] };
   }
 
   const rows: RosterRow[] = [];
   const errors: RosterError[] = [];
   const firstLineByCode = new Map<string, number>();
-  lines.forEach((line, index) => {
-    if (index <= headerIndex || line.trim() === "") return;
-    const cells = splitLine(line, delimiter);
-    const cell = (column: Column) => cells[indexes[column] ?? -1] ?? "";
+  for (const record of records) {
+    const cell = (column: Column) => record.cells[indexes[column] ?? -1] ?? "";
     const row: RosterRow = {
-      line: index + 1,
+      line: record.line,
       code: normalizeCode(cell("code")),
       fullName: collapse(cell("fullName")),
       groupName: collapse(cell("groupName")),
@@ -120,11 +154,11 @@ export function parseRoster(text: string, studentCodePattern: string): RosterPar
     const error = validateRow(row, studentCodePattern, firstLineByCode);
     if (error) {
       errors.push({ line: row.line, message: error });
-      return;
+      continue;
     }
     firstLineByCode.set(row.code, row.line);
     rows.push(row);
-  });
+  }
   return { rows, errors };
 }
 
@@ -155,7 +189,7 @@ export function planNewGroups(
   const preferred = new Map<string, number>();
   for (const name of names) {
     const order = groupOrderFromName(name);
-    if (order !== null && order > 0 && !takenOrders.has(order)) {
+    if (order !== null && order > 0 && order <= MAX_GROUP_ORDER && !takenOrders.has(order)) {
       preferred.set(name, order);
       takenOrders.add(order);
     }

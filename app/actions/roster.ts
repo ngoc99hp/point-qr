@@ -5,7 +5,12 @@ import { z } from "zod";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireLecturer } from "@/lib/auth";
 import { findOwnedEvent, findOwnedGroup } from "@/lib/data/ownership";
-import { writeRoster, type ImportMode, type ImportSummary } from "@/lib/data/roster-import";
+import {
+  RosterReplaceBlockedError,
+  writeRoster,
+  type ImportMode,
+  type ImportSummary,
+} from "@/lib/data/roster-import";
 import { db } from "@/lib/db";
 import { nextGroupName } from "@/lib/groups";
 import { isUniqueViolation } from "@/lib/prisma-errors";
@@ -160,17 +165,18 @@ export async function importRoster(
   }
   if (roster.rows.length === 0) return fail("VALIDATION", "Không có dòng dữ liệu nào.");
 
-  if (parsed.data.mode === "replace") {
-    const [ratings, openRounds] = await Promise.all([
-      db.rating.count({ where: { round: { eventId: event.id } }, take: 1 }),
-      db.round.count({ where: { eventId: event.id, status: "OPEN" }, take: 1 }),
-    ]);
-    if (ratings > 0 || openRounds > 0) {
-      return fail("HAS_RATINGS", "Buổi đánh giá đã có phiếu hoặc đang mở phiên chấm, không thể thay thế toàn bộ. Hãy dùng chế độ bổ sung.");
+  // Replace preconditions are checked inside writeRoster under row locks (no race).
+  try {
+    const summary = await writeRoster(event.id, roster.rows, parsed.data.mode);
+    refresh();
+    return ok(summary);
+  } catch (error) {
+    if (error instanceof RosterReplaceBlockedError) {
+      return fail(
+        "HAS_RATINGS",
+        "Buổi đánh giá đã có phiếu hoặc đang mở phiên chấm, không thể thay thế toàn bộ. Hãy dùng chế độ bổ sung.",
+      );
     }
+    throw error;
   }
-
-  const summary = await writeRoster(event.id, roster.rows, parsed.data.mode);
-  refresh();
-  return ok(summary);
 }

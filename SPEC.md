@@ -635,11 +635,19 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 - **Tính lại cờ khi SV gửi lại (BR-06):** cờ được tính lại từ đầu. `excluded = (GV đã loại thủ công) || DEVICE_MULTI_STUDENT`. Phiếu bị GV loại thủ công (`excludedBy = lecturerId`) vẫn bị loại khi SV gửi lại; phiếu bị loại tự động (`AUTO`) được khôi phục nếu không còn cờ `DEVICE_MULTI_STUDENT`.
 - **BR-10:** chỉ xét các phiếu **khác MSV** trong cùng round có cùng `deviceId`. Phiếu đầu tiên của thiết bị không bị ảnh hưởng; chỉ phiếu đến sau bị gắn cờ và tự loại.
 - **Thứ tự kiểm tra `submitRating` ở P2:** BR-03 → BR-04 → BR-05 → BR-08 (`NOT_IN_ROSTER`) → BR-07 (`SELF_RATING`) → BR-09 (cờ) → BR-10 (cờ + loại) → upsert.
-- **Loại/khôi phục thủ công** (`setRatingExcluded`): GV đặt `excluded` và `excludedBy = lecturerId` (hoặc `null` khi khôi phục). Lọc theo `ownerId`.
+- **Loại/khôi phục thủ công** (`setRatingExcluded`): khi loại, GV đặt `excluded = true` và `excludedBy = lecturerId`. Khi khôi phục, đặt `excluded = false` và `excludedBy = "MANUAL_INCLUDE"`.
+  - Quyết định của GV **luôn thắng** quy tắc tự động khi SV gửi lại, theo cả hai chiều.
+  - Lọc theo `ownerId`.
+  - Không cho thao tác trên event `ARCHIVED`.
+- **Giới hạn import:** tối đa 2000 dòng mỗi lần; họ tên ≤ 100 ký tự; tên nhóm ≤ 50 ký tự; số lấy từ tên nhóm chỉ dùng làm `order` nếu ≤ 10000. Ô có xuống dòng bên trong dấu ngoặc kép được hỗ trợ.
+- **Chế độ thay thế không bị race:** `writeRoster` khóa mọi Round của event bằng `FOR UPDATE` rồi kiểm tra lại điều kiện "chưa có phiếu, không có round OPEN" **ngay trong transaction**. Nhờ vậy phiếu vừa gửi không bao giờ bị cascade xóa.
+- **Xếp hạng:** so sánh trên giá trị làm tròn đến 1e-6, để sai số float không phá thế hòa.
 - **Export CSV:**
   - Summary: Hạng, Nhóm, Số phiếu, TB, TB cắt, Trung vị, Độ lệch chuẩn, Min, Max, Số phiếu bị loại.
   - Raw: Nhóm, MSV, Tên nhập, Tên roster, Điểm, Cờ, Bị loại, Thời gian (giờ Việt Nam), Số lần sửa.
-  - Số dùng dấu chấm thập phân. Ô bắt đầu bằng `= + - @` được thêm tiền tố `'` để chống CSV injection.
+  - Số dùng dấu chấm thập phân.
+  - Ô bắt đầu bằng `= + - @`, tab, CR, hoặc khoảng trắng rồi đến các ký tự đó, được thêm tiền tố `'` để chống CSV injection (theo OWASP).
+- **Đã biết, để P3:** `checkStudentCode` là endpoint public chưa có rate limit. Người có `roundId` có thể dò xem một MSV có trong danh sách hay không, và có thuộc nhóm đang chấm hay không. P3 sẽ thêm rate limit theo `deviceId`/`ipHash`.
 
 ### P3: Chống gian lận nâng cao
 - QR xoay vòng và ticket (§9.1, 9.2), rate limit theo device (§9.3).

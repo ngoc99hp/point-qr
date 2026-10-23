@@ -31,6 +31,8 @@ export interface FlagDecision {
 }
 
 export const AUTO_EXCLUDED_BY = "AUTO";
+/** excludedBy marker when the lecturer explicitly kept a rating (BR-11); survives resubmission. */
+export const MANUAL_INCLUDE = "MANUAL_INCLUDE";
 
 /**
  * Recomputes flags from scratch on every (re)submission (SPEC §14 P2):
@@ -51,7 +53,11 @@ export function evaluateFlags(input: {
   }
   if (input.deviceUsedByOtherStudent) flags.push("DEVICE_MULTI_STUDENT");
 
+  // Lecturer decisions (BR-11) win over automatic rules in both directions.
   const previous = input.previous;
+  if (previous?.excludedBy === MANUAL_INCLUDE) {
+    return { flags, excluded: false, excludedBy: MANUAL_INCLUDE };
+  }
   if (previous?.excluded && previous.excludedBy && previous.excludedBy !== AUTO_EXCLUDED_BY) {
     return { flags, excluded: true, excludedBy: previous.excludedBy };
   }

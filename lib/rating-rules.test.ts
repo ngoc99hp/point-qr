@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateRoster, evaluateFlags } from "./rating-rules";
+import { MANUAL_INCLUDE, evaluateFlags, evaluateRoster } from "./rating-rules";
 
 const ROSTER_STUDENT = { id: "s1", fullName: "Đào Anh Ngọc", groupId: "g2" };
 
@@ -90,5 +90,19 @@ describe("evaluateFlags (BR-08, BR-09, BR-10)", () => {
       excluded: false,
       excludedBy: null,
     });
+  });
+});
+
+describe("evaluateFlags manual include", () => {
+  it("keeps a rating the lecturer manually restored, even if the device flag still applies", () => {
+    expect(
+      evaluateFlags({
+        unknownStudent: false,
+        enteredName: "dao anh ngoc",
+        rosterName: "Đào Anh Ngọc",
+        deviceUsedByOtherStudent: true,
+        previous: { excluded: false, excludedBy: MANUAL_INCLUDE },
+      }),
+    ).toEqual({ flags: ["DEVICE_MULTI_STUDENT"], excluded: false, excludedBy: MANUAL_INCLUDE });
   });
 });

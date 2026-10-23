@@ -108,3 +108,33 @@ describe("planNewGroups", () => {
     ]);
   });
 });
+
+describe("parseRoster limits and multi-line cells", () => {
+  it("keeps a quoted cell that contains a newline and reports the record's first line", () => {
+    const text = 'MSV,Họ tên,Nhóm\n1000001,"Đào\nAnh Ngọc",Nhóm 1\nSV1,X,Nhóm 1';
+    const result = parseRoster(text, PATTERN);
+    expect(result.rows).toEqual([{ line: 2, code: "1000001", fullName: "Đào Anh Ngọc", groupName: "Nhóm 1" }]);
+    expect(result.errors).toEqual([{ line: 4, message: "MSV không đúng định dạng." }]);
+  });
+
+  it("rejects names longer than 100 and group names longer than 50 characters", () => {
+    const text = `MSV\tHọ tên\tNhóm\n1000001\t${"a".repeat(101)}\tNhóm 1\n1000002\tB\t${"n".repeat(51)}`;
+    expect(parseRoster(text, PATTERN).errors).toEqual([
+      { line: 2, message: "Họ tên tối đa 100 ký tự." },
+      { line: 3, message: "Tên nhóm tối đa 50 ký tự." },
+    ]);
+  });
+
+  it("rejects more than 2000 data rows", () => {
+    const rows = Array.from({ length: 2001 }, (_, i) => `${1000000 + i}\tSV ${i}\tNhóm 1`);
+    const result = parseRoster(["MSV\tHọ tên\tNhóm", ...rows].join("\n"), PATTERN);
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toEqual([{ line: 1, message: "Tối đa 2000 sinh viên mỗi lần nhập." }]);
+  });
+});
+
+describe("planNewGroups order cap", () => {
+  it("ignores absurdly large numbers in a group name", () => {
+    expect(planNewGroups([], ["Nhóm 99999999999"])).toEqual([{ name: "Nhóm 99999999999", order: 1 }]);
+  });
+});
