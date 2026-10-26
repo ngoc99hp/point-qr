@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react
 import { useState } from "react";
 import { addGroup, deleteGroup, moveGroup, renameGroup } from "@/app/actions/roster";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill, type PillTone } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useActionRunner } from "@/components/use-action-runner";
@@ -17,6 +17,8 @@ export interface ManagedGroup {
   ratingCount: number;
   studentCount: number;
 }
+
+const STATUS_TONE: Record<GroupRoundStatus, PillTone> = { NONE: "idle", OPEN: "live", CLOSED: "done" };
 
 const STATUS_LABEL: Record<GroupRoundStatus, string> = {
   NONE: "Chưa chấm",
@@ -100,10 +102,10 @@ function GroupRow({ group, isFirst, isLast, isLocked, onMove, onDelete, onRename
           </Button>
         </form>
       )}
-      <Badge variant={group.roundStatus === "OPEN" ? "default" : "secondary"}>
+      <StatusPill tone={STATUS_TONE[group.roundStatus]}>
         {STATUS_LABEL[group.roundStatus]}
         {group.roundStatus !== "NONE" ? ` · ${group.ratingCount} phiếu` : ""}
-      </Badge>
+      </StatusPill>
       <div className="flex items-center">
         <Button size="icon" variant="ghost" disabled={isLocked || draft !== null} onClick={() => setDraft(group.name)} aria-label={`Đổi tên ${group.name}`}>
           <Pencil aria-hidden />

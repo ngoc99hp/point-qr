@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Play, Square } from "lucide-react";
 import { useState } from "react";
 import { closeRound, openRound } from "@/app/actions/rounds";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ export function RoundControls({ snapshot, onChanged }: RoundControlsProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Chọn nhóm">
         {snapshot.groups.map((group) => (
           <button
@@ -53,36 +54,47 @@ export function RoundControls({ snapshot, onChanged }: RoundControlsProps) {
             onClick={() => setSelectedId(group.id)}
             aria-pressed={selected?.id === group.id}
             className={cn(
-              "rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-ring",
-              group.roundStatus === "OPEN" && "border-primary bg-primary text-primary-foreground",
-              group.roundStatus === "CLOSED" && "bg-muted text-muted-foreground",
-              selected?.id === group.id && "ring-2 ring-ring ring-offset-2 ring-offset-background",
+              "inline-flex h-11 items-center gap-2 rounded-2xl border bg-card px-4 text-sm font-semibold shadow-sm transition-all",
+              "hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              group.roundStatus === "OPEN" && "border-coral bg-coral text-white shadow-coral/30",
+              group.roundStatus === "CLOSED" && "border-mint/40 bg-mint/10 text-score-high-ink",
+              selected?.id === group.id && "ring-2 ring-primary ring-offset-2 ring-offset-background",
             )}
           >
-            <span className="font-medium">{group.name}</span>
+            {group.roundStatus === "OPEN" ? <span aria-hidden className="size-2 animate-pulse rounded-full bg-white" /> : null}
+            {group.roundStatus === "CLOSED" ? <Check aria-hidden className="size-4" /> : null}
+            <span>{group.name}</span>
             {group.roundStatus !== "NONE" ? (
-              <span className="ml-2 tabular-nums opacity-80">{group.validCount}</span>
+              <span className="rounded-full bg-black/10 px-2 py-0.5 text-xs tabular-nums dark:bg-white/15">{group.validCount}</span>
             ) : null}
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-3">
         <Button
           size="lg"
+          className="h-12 rounded-2xl bg-brand-gradient px-6 text-base font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-95"
           disabled={isDisabled || !selected || selected.roundStatus === "OPEN"}
           onClick={() => selected && open(selected.id)}
         >
-          {selected ? `Mở chấm ${selected.name}` : "Mở chấm"}
+          <Play aria-hidden /> {selected ? `Mở chấm ${selected.name}` : "Mở chấm"}
         </Button>
         <Button
           size="lg"
           variant="outline"
+          className="h-12 rounded-2xl px-6 text-base font-semibold"
           disabled={isDisabled || !current}
           onClick={() => current && run(() => closeRound(current.roundId), onChanged)}
         >
-          Đóng
+          <Square aria-hidden /> Đóng
         </Button>
-        <Button size="lg" variant="secondary" disabled={isDisabled || !next} onClick={() => next && open(next.id)}>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="h-12 rounded-2xl px-6 text-base font-semibold"
+          disabled={isDisabled || !next}
+          onClick={() => next && open(next.id)}
+        >
           {next ? `${next.name} →` : "Nhóm tiếp →"}
         </Button>
       </div>

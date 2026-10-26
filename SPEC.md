@@ -570,6 +570,20 @@ Kèm file `.env.example`. Validate env lúc khởi động bằng Zod (`lib/env.
 - Màu badge cờ: `UNKNOWN_STUDENT` vàng, `NAME_MISMATCH` cam, `DEVICE_MULTI_STUDENT` đỏ.
 - Mọi thông báo lỗi bằng tiếng Việt, ngắn, nói rõ cần làm gì.
 
+### 12.1 Theme "Campus Pop" (chủ sản phẩm yêu cầu giao diện trẻ trung, năng động, tươi mới — 26/10/2026)
+- **Font:** Be Vietnam Pro, 3 weight 400/600/800 (dấu tiếng Việt đẹp; ít weight để giữ hiệu năng mobile). Số liệu dùng `tabular-nums`.
+- **Màu (token trong `app/globals.css`, có bản dark):**
+  - primary tím điện `oklch(0.54 0.24 289)`; accent coral; mint; vàng nắng.
+  - Nền trắng ánh tím kèm quầng sáng nhẹ (`bg-canvas`).
+  - Dark mode nền tím than, không dùng đen thuần.
+- **Gradient chữ ký** tím → hồng → coral (`bg-brand-gradient`, `text-brand-gradient`). Chỉ dùng cho: logo, vạch đầu header, điểm trung bình trên màn chiếu, nút chính (Mở màn chiếu, Mở chấm, Gửi điểm), panel trái trang đăng nhập, dải đầu trang SV.
+- **Màu theo điểm** (`lib/score-color.ts`): thấp (< 5) coral, trung bình (5–6,5) vàng, khá (7–8,5) mint, giỏi (≥ 9) tím. Dùng cho lưới chọn điểm của SV và pill điểm trên màn chiếu.
+  - Chữ dùng sắc độ "ink" đậm để đạt tương phản ≥ 4,5:1 (WCAG AA).
+  - Nút được chọn: nền đặc màu ink, chữ trắng.
+- **Chip trạng thái** (`components/status-pill.tsx`): đang mở = coral có chấm nhấp nháy (tắt khi bật reduced-motion), đã đóng = mint, chưa chấm = xám.
+- **QR** render dạng SVG trong khung vuông trắng (không dùng canvas, vì thư viện gán inline height làm méo mã).
+- Lighthouse trang SV sau khi đổi theme vẫn đạt Performance ~90, Accessibility 100, Best Practices 100 (đo local).
+
 ---
 
 ## 13. Kiểm thử

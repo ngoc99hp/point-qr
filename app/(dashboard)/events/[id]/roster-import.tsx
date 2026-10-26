@@ -1,5 +1,6 @@
 "use client";
 
+import { FileUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { importRoster } from "@/app/actions/roster";
@@ -59,18 +60,26 @@ export function RosterImport({ eventId, studentCodePattern, existingCodes, canRe
           disabled={disabled || isPending}
           className="min-h-32 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50"
         />
-        <input
-          type="file"
-          accept=".csv,.tsv,.txt,text/csv,text/plain"
-          disabled={disabled || isPending}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void loadFile(file);
-            event.target.value = "";
-          }}
-          className="text-sm file:mr-3 file:rounded-md file:border file:bg-background file:px-3 file:py-1 file:text-sm"
-          aria-label="Chọn file CSV"
-        />
+        {/* Native file input is visually hidden; the label is the (Vietnamese) button. */}
+        <label
+          className={
+            "inline-flex w-fit cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm font-semibold shadow-sm transition-colors hover:bg-secondary has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring" +
+            (disabled || isPending ? " pointer-events-none opacity-50" : "")
+          }
+        >
+          <FileUp aria-hidden className="size-4" /> Chọn file CSV
+          <input
+            type="file"
+            accept=".csv,.tsv,.txt,text/csv,text/plain"
+            disabled={disabled || isPending}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void loadFile(file);
+              event.target.value = "";
+            }}
+            className="sr-only"
+          />
+        </label>
       </div>
 
       <fieldset className="flex flex-wrap gap-4 text-sm" disabled={disabled || isPending}>

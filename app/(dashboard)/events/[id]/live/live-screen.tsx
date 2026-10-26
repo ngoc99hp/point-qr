@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Maximize, Minimize } from "lucide-react";
+import { Maximize, Minimize, ScanLine } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { QueryProvider } from "@/components/query-provider";
+import { StatusPill } from "@/components/status-pill";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { LOGIN_PATH } from "@/lib/routes";
@@ -104,9 +105,12 @@ function LiveBoard({ data, qrValue, studentUrl, isOffline, fullscreen, onChanged
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-muted-foreground">{data.event.title}</h1>
-          <p className="text-4xl font-bold md:text-6xl" aria-live="polite">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            {data.current ? <StatusPill tone="live">TRỰC TIẾP</StatusPill> : <StatusPill tone="idle">Chờ mở phiên</StatusPill>}
+            <h1 className="text-xl font-semibold text-muted-foreground">{data.event.title}</h1>
+          </div>
+          <p className="text-5xl font-extrabold md:text-7xl" aria-live="polite">
             {data.current ? `Đang chấm: ${data.current.groupName}` : "Chưa mở phiên chấm"}
           </p>
         </div>
@@ -123,15 +127,20 @@ function LiveBoard({ data, qrValue, studentUrl, isOffline, fullscreen, onChanged
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <section aria-label="Mã QR" className="flex flex-col items-center gap-3">
+        <section aria-label="Mã QR" className="flex flex-col items-center gap-4">
+          <p className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-1.5 text-sm font-semibold text-secondary-foreground">
+            <ScanLine aria-hidden className="size-4" /> Quét mã để chấm điểm
+          </p>
           {qrValue ? (
             <QrCode value={qrValue} label={`Mã QR dẫn tới ${displayUrl}`} />
           ) : (
-            <div className="flex aspect-square w-full max-w-[min(70vh,100%)] items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <div className="flex aspect-square w-full max-w-[min(62vh,100%)] items-center justify-center rounded-3xl bg-muted text-muted-foreground">
               Đang tạo mã QR…
             </div>
           )}
-          <p className="break-all text-center font-mono text-xl md:text-2xl">{displayUrl}</p>
+          <p className="break-all rounded-2xl border bg-card px-4 py-2 text-center font-mono text-xl font-semibold md:text-2xl">
+            {displayUrl}
+          </p>
           {data.event.rotatingQr ? (
             <p className="text-center text-sm text-muted-foreground">Mã QR tự đổi mỗi 30 giây — hãy quét trực tiếp tại lớp.</p>
           ) : null}
@@ -143,14 +152,14 @@ function LiveBoard({ data, qrValue, studentUrl, isOffline, fullscreen, onChanged
               <RaterList ratings={data.current.ratings} />
             </>
           ) : (
-            <p className="rounded-xl border border-dashed p-8 text-center text-xl text-muted-foreground">
+            <p className="rounded-3xl border-2 border-dashed p-10 text-center text-xl text-muted-foreground">
               Chọn nhóm rồi bấm &quot;Mở chấm&quot; để sinh viên bắt đầu gửi điểm.
             </p>
           )}
         </section>
       </div>
 
-      <section aria-label="Điều khiển" className="border-t pt-4">
+      <section aria-label="Điều khiển" className="rounded-3xl border bg-card/80 p-4 shadow-sm backdrop-blur md:p-5">
         <RoundControls snapshot={data} onChanged={onChanged} />
       </section>
     </>

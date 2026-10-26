@@ -4,6 +4,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * "Campus Pop" theme — youthful, energetic, fresh.
+ * Electric violet primary, coral accent, mint/sun for semantic score colours,
+ * a violet-tinted canvas instead of flat white, Be Vietnam Pro typography.
+ * The violet→coral gradient is the signature and is used sparingly.
+ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -39,6 +46,27 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  /* Brand + semantic tokens */
+  --color-brand: var(--brand);
+  --color-coral: var(--coral);
+  --color-mint: var(--mint);
+  --color-sun: var(--sun);
+  --color-score-low: var(--score-low);
+  --color-score-low-soft: var(--score-low-soft);
+  --color-score-mid: var(--score-mid);
+  --color-score-mid-soft: var(--score-mid-soft);
+  --color-score-high: var(--score-high);
+  --color-score-high-soft: var(--score-high-soft);
+  --color-score-top: var(--score-top);
+  --color-score-top-soft: var(--score-top-soft);
+  --color-score-low-ink: var(--score-low-ink);
+  --color-score-mid-ink: var(--score-mid-ink);
+  --color-score-high-ink: var(--score-high-ink);
+  --color-score-top-ink: var(--score-top-ink);
+  --color-score-on-solid: var(--score-on-solid);
+  --color-coral-ink: var(--coral-ink);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -49,72 +77,140 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.75rem;
+
+  --background: oklch(0.985 0.008 290);
+  --foreground: oklch(0.2 0.04 285);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.2 0.04 285);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.2 0.04 285);
+  --primary: oklch(0.54 0.24 289);
+  --primary-foreground: oklch(0.99 0.005 290);
+  --secondary: oklch(0.95 0.025 290);
+  --secondary-foreground: oklch(0.36 0.15 289);
+  --muted: oklch(0.955 0.012 290);
+  --muted-foreground: oklch(0.5 0.03 285);
+  --accent: oklch(0.95 0.03 35);
+  --accent-foreground: oklch(0.45 0.16 35);
+  --destructive: oklch(0.6 0.22 22);
+  --border: oklch(0.91 0.018 290);
+  --input: oklch(0.88 0.022 290);
+  --ring: oklch(0.6 0.2 289);
+
+  --brand: oklch(0.54 0.24 289);
+  --coral: oklch(0.69 0.19 35);
+  --mint: oklch(0.72 0.14 168);
+  --sun: oklch(0.86 0.16 88);
+  --brand-gradient: linear-gradient(120deg, oklch(0.54 0.24 289) 0%, oklch(0.6 0.24 330) 52%, oklch(0.71 0.18 40) 100%);
+
+  /* Score scale: low → coral, mid → sun, high → mint, top → violet */
+  --score-low: oklch(0.62 0.2 30);
+  --score-low-soft: oklch(0.95 0.04 30);
+  --score-mid: oklch(0.68 0.15 75);
+  --score-mid-soft: oklch(0.96 0.05 90);
+  --score-high: oklch(0.6 0.13 165);
+  --score-high-soft: oklch(0.95 0.04 165);
+  --score-top: oklch(0.54 0.24 289);
+  --score-top-soft: oklch(0.94 0.04 290);
+  /* "ink": text on the soft fill and the selected (solid) fill — WCAG AA ≥ 4.5:1 */
+  --score-low-ink: oklch(0.49 0.18 30);
+  --score-mid-ink: oklch(0.47 0.11 65);
+  --score-high-ink: oklch(0.45 0.1 165);
+  --score-top-ink: oklch(0.47 0.23 289);
+  --score-on-solid: oklch(1 0 0);
+  --coral-ink: oklch(0.5 0.18 32);
+
+  --chart-1: oklch(0.54 0.24 289);
+  --chart-2: oklch(0.69 0.19 35);
+  --chart-3: oklch(0.72 0.14 168);
+  --chart-4: oklch(0.86 0.16 88);
+  --chart-5: oklch(0.6 0.24 330);
+  --sidebar: oklch(0.98 0.01 290);
+  --sidebar-foreground: oklch(0.2 0.04 285);
+  --sidebar-primary: oklch(0.54 0.24 289);
+  --sidebar-primary-foreground: oklch(0.99 0.005 290);
+  --sidebar-accent: oklch(0.95 0.025 290);
+  --sidebar-accent-foreground: oklch(0.36 0.15 289);
+  --sidebar-border: oklch(0.91 0.018 290);
+  --sidebar-ring: oklch(0.6 0.2 289);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --background: oklch(0.17 0.035 285);
+  --foreground: oklch(0.96 0.01 290);
+  --card: oklch(0.215 0.04 285);
+  --card-foreground: oklch(0.96 0.01 290);
+  --popover: oklch(0.225 0.04 285);
+  --popover-foreground: oklch(0.96 0.01 290);
+  --primary: oklch(0.7 0.19 290);
+  --primary-foreground: oklch(0.17 0.035 285);
+  --secondary: oklch(0.28 0.06 288);
+  --secondary-foreground: oklch(0.9 0.05 290);
+  --muted: oklch(0.26 0.04 285);
+  --muted-foreground: oklch(0.72 0.035 288);
+  --accent: oklch(0.3 0.07 35);
+  --accent-foreground: oklch(0.88 0.08 40);
+  --destructive: oklch(0.7 0.19 22);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.7 0.19 290);
+
+  --brand: oklch(0.7 0.19 290);
+  --coral: oklch(0.74 0.17 38);
+  --mint: oklch(0.78 0.13 168);
+  --sun: oklch(0.86 0.15 88);
+  --brand-gradient: linear-gradient(120deg, oklch(0.66 0.21 289) 0%, oklch(0.68 0.21 330) 52%, oklch(0.76 0.16 42) 100%);
+
+  --score-low: oklch(0.74 0.17 30);
+  --score-low-soft: oklch(0.32 0.08 30);
+  --score-mid: oklch(0.84 0.14 85);
+  --score-mid-soft: oklch(0.33 0.07 85);
+  --score-high: oklch(0.8 0.13 165);
+  --score-high-soft: oklch(0.31 0.06 165);
+  --score-top: oklch(0.78 0.16 290);
+  --score-top-soft: oklch(0.32 0.09 290);
+  --score-low-ink: oklch(0.82 0.12 30);
+  --score-mid-ink: oklch(0.88 0.12 85);
+  --score-high-ink: oklch(0.85 0.11 165);
+  --score-top-ink: oklch(0.84 0.12 290);
+  --score-on-solid: oklch(0.17 0.035 285);
+  --coral-ink: oklch(0.82 0.12 38);
+
+  --chart-1: oklch(0.7 0.19 290);
+  --chart-2: oklch(0.74 0.17 38);
+  --chart-3: oklch(0.78 0.13 168);
+  --chart-4: oklch(0.86 0.15 88);
+  --chart-5: oklch(0.68 0.21 330);
+  --sidebar: oklch(0.2 0.04 285);
+  --sidebar-foreground: oklch(0.96 0.01 290);
+  --sidebar-primary: oklch(0.7 0.19 290);
+  --sidebar-primary-foreground: oklch(0.17 0.035 285);
+  --sidebar-accent: oklch(0.28 0.06 288);
+  --sidebar-accent-foreground: oklch(0.9 0.05 290);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.7 0.19 290);
+}
+
+/* Signature gradient, used sparingly: logo, big mean, primary student CTA, header line. */
+@utility bg-brand-gradient {
+  background-image: var(--brand-gradient);
+}
+
+@utility text-brand-gradient {
+  background-image: var(--brand-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Soft atmospheric wash behind pages (light violet + coral glow, no image request). */
+@utility bg-canvas {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(60rem 30rem at 0% -10%, color-mix(in oklch, var(--brand) 12%, transparent), transparent 70%),
+    radial-gradient(40rem 24rem at 100% 0%, color-mix(in oklch, var(--coral) 10%, transparent), transparent 70%);
+  background-attachment: fixed;
 }
 
 @layer base {
@@ -126,5 +222,20 @@
   }
   html {
     @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

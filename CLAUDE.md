@@ -47,5 +47,6 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 - **Neon cold start** can take ~10 s; if a DB script/test fails with P1001 or a WebSocket ErrorEvent, wake the DB and retry before debugging.
 - **Student page stays light** (`app/r/[code]`): no radix-based shadcn components, no sonner — use `student-ui.tsx` (native label/button, inline aria-live notice). Lighthouse mobile target ≥ 90.
 - **Playwright:** Next 16 keeps recently visited pages mounted but hidden (React Activity), so `getByText` can match an invisible previous page — assert with role queries / visibility. Always wait for the test's own `[TEST]` heading before reading data from a page, and never touch non-`[TEST]` events.
+- **Theme "Campus Pop" (SPEC §12.1):** use the tokens (`bg-brand-gradient`, `text-brand-gradient`, `coral`/`mint`/`sun`, `score-*`/`score-*-ink`) — no raw hex. Text on soft fills uses the `-ink` shades (contrast ≥ 4.5:1); keep the gradient for signature spots only. Score colours come from `lib/score-color.ts`, status chips from `components/status-pill.tsx`.
 - **CSP** lives in `next.config.ts` without nonces (T28); adding external scripts/fonts/APIs requires updating it.
 - **Scripted edits:** never use `String.replace` with a string replacement containing `$` (`` $` `` / `$'` / `$&` are special); use the Edit tool or a function replacement.

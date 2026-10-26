@@ -77,28 +77,30 @@ function RatingFormContent({ eventCode, eventTitle, scoreOptions, initialCurrent
   });
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <p className="text-sm text-muted-foreground">{eventTitle}</p>
-        <h1 className="text-3xl font-bold leading-tight" aria-live="polite">
+    <div className="flex flex-col">
+      <header className="-mx-4 -mt-6 flex flex-col gap-2 rounded-b-[2.5rem] bg-brand-gradient px-6 pt-8 pb-16 text-white">
+        <p className="text-sm font-semibold text-white/80">{eventTitle}</p>
+        <h1 className="text-3xl font-extrabold leading-tight" aria-live="polite">
           {session.kind === "ACTIVE" ? `Đang chấm: ${session.ticket.groupName}` : "Chưa có phiên chấm"}
         </h1>
       </header>
-      {session.kind === "ACTIVE" ? (
-        <ScoringForm
-          key={session.ticket.roundId}
-          eventCode={eventCode}
-          ticket={session.ticket}
-          scoreOptions={scoreOptions}
-          onStale={() => void refetch()}
-        />
-      ) : (
-        <p role="status" className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-          {session.kind === "RESCAN"
-            ? RESCAN_MESSAGE[session.reason]
-            : "Chưa có nhóm nào đang mở chấm. Trang sẽ tự cập nhật khi giảng viên mở phiên."}
-        </p>
-      )}
+      <div className="-mt-10 rounded-3xl border bg-card p-5 shadow-xl shadow-primary/10">
+        {session.kind === "ACTIVE" ? (
+          <ScoringForm
+            key={session.ticket.roundId}
+            eventCode={eventCode}
+            ticket={session.ticket}
+            scoreOptions={scoreOptions}
+            onStale={() => void refetch()}
+          />
+        ) : (
+          <p role="status" className="p-4 text-center text-muted-foreground">
+            {session.kind === "RESCAN"
+              ? RESCAN_MESSAGE[session.reason]
+              : "Chưa có nhóm nào đang mở chấm. Trang sẽ tự cập nhật khi giảng viên mở phiên."}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -171,7 +173,7 @@ function ScoringForm({ eventCode, ticket, scoreOptions, onStale }: ScoringFormPr
         <FieldError id="score-error" message={errors.score} />
       </div>
       <NoticeBanner notice={notice} />
-      <StudentButton type="submit" className="h-14 text-lg" disabled={isPending}>
+      <StudentButton type="submit" className="h-14 rounded-2xl bg-brand-gradient text-lg font-bold shadow-lg shadow-primary/30" disabled={isPending}>
         {isPending ? "Đang gửi…" : submitted ? "Cập nhật điểm" : "Gửi điểm"}
       </StudentButton>
     </form>

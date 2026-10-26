@@ -1,5 +1,6 @@
 "use client";
 
+import { SCORE_SOFT_CLASS, SCORE_SOLID_CLASS, scoreTier } from "@/lib/score-color";
 import { cn } from "@/lib/utils";
 
 interface ScoreGridProps {
@@ -23,6 +24,7 @@ export function ScoreGrid({ options, value, onChange, disabled, describedBy }: S
     >
       {options.map((score) => {
         const isSelected = value === score;
+        const tier = scoreTier(score, options[0] ?? 0, options.at(-1) ?? 10);
         return (
           <button
             key={score}
@@ -32,12 +34,10 @@ export function ScoreGrid({ options, value, onChange, disabled, describedBy }: S
             disabled={disabled}
             onClick={() => onChange(score)}
             className={cn(
-              "h-12 rounded-lg border text-lg font-medium tabular-nums transition-colors",
+              "h-12 rounded-2xl border text-lg font-bold tabular-nums transition-all duration-150",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              "disabled:opacity-50",
-              isSelected
-                ? "border-primary bg-primary text-primary-foreground"
-                : "bg-background active:bg-muted",
+              "active:scale-95 disabled:opacity-50",
+              isSelected ? cn(SCORE_SOLID_CLASS[tier], "scale-105 shadow-lg") : SCORE_SOFT_CLASS[tier],
             )}
           >
             {formatOption(score)}

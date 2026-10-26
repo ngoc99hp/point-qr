@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireLecturer } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { decimalToNumber } from "@/lib/mappers";
+import { cn } from "@/lib/utils";
 import { ArchiveButton } from "./archive-button";
 import { ClearRosterButton, DeleteEventButton } from "./danger-actions";
 import { GroupManager } from "./group-manager";
@@ -174,7 +175,7 @@ function EventHeader({ event, isArchived }: { event: LoadedEvent; isArchived: bo
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span>
             Mã{" "}
-            <span data-testid="event-code" className="font-mono text-base font-semibold text-foreground">
+            <span data-testid="event-code" className="rounded-lg bg-secondary px-2 py-0.5 font-mono text-base font-bold tracking-wider text-secondary-foreground">
               {event.code}
             </span>
           </span>
@@ -187,7 +188,10 @@ function EventHeader({ event, isArchived }: { event: LoadedEvent; isArchived: bo
           Kết quả
         </Link>
         {!isArchived ? (
-          <Link href={`/events/${event.id}/live`} className={buttonVariants()}>
+          <Link
+            href={`/events/${event.id}/live`}
+            className={cn(buttonVariants(), "bg-brand-gradient px-4 font-semibold text-white shadow-md shadow-primary/25 hover:opacity-95")}
+          >
             Mở màn chiếu
           </Link>
         ) : null}
