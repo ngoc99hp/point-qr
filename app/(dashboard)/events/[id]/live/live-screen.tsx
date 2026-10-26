@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Maximize, Minimize, ScanLine } from "lucide-react";
+import { ArrowLeft, Maximize, Minimize, ScanLine } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { QueryProvider } from "@/components/query-provider";
 import { StatusPill } from "@/components/status-pill";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { LOGIN_PATH } from "@/lib/routes";
 import type { LiveResponse } from "@/lib/types/live";
 import { cn } from "@/lib/utils";
@@ -114,8 +115,11 @@ function LiveBoard({ data, qrValue, studentUrl, isOffline, fullscreen, onChanged
             {data.current ? `Đang chấm: ${data.current.groupName}` : "Chưa mở phiên chấm"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isOffline ? <p className="text-sm text-destructive">Mất kết nối, đang thử lại…</p> : null}
+          <Link href={`/events/${data.event.id}`} className={buttonVariants({ variant: "outline" })}>
+            <ArrowLeft aria-hidden /> Về cấu hình lớp
+          </Link>
           <ThemeToggle />
           {fullscreen.isSupported ? (
             <Button variant="outline" onClick={fullscreen.toggle}>

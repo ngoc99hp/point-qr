@@ -41,13 +41,12 @@ async function loadEvent(lecturerId: string, eventId: string) {
       trimRatio: true,
       strictRoster: true,
       rotatingQr: true,
-      students: { select: { code: true } },
+      students: { orderBy: { code: "asc" }, select: { code: true, fullName: true, groupId: true } },
       groups: {
         orderBy: { order: "asc" },
         select: {
           id: true,
           name: true,
-          _count: { select: { students: true } },
           round: { select: { status: true, _count: { select: { ratings: true } } } },
         },
       },
@@ -78,13 +77,15 @@ async function EventSetup({ params }: { params: Promise<{ id: string }> }) {
   if (!event) notFound();
 
   const isArchived = event.status === "ARCHIVED";
+  const toStudent = ({ code, fullName }: { code: string; fullName: string }) => ({ code, fullName });
   const groups = event.groups.map((group) => ({
     id: group.id,
     name: group.name,
     roundStatus: group.round?.status ?? ("NONE" as const),
     ratingCount: group.round?._count.ratings ?? 0,
-    studentCount: group._count.students,
+    students: event.students.filter((student) => student.groupId === group.id).map(toStudent),
   }));
+  const ungroupedStudents = event.students.filter((student) => student.groupId === null).map(toStudent);
   const hasRatings = groups.some((group) => group.ratingCount > 0);
   const hasOpenRound = groups.some((group) => group.roundStatus === "OPEN");
   const isMissingRoster = event.students.length === 0 && event.strictRoster;
@@ -104,11 +105,12 @@ async function EventSetup({ params }: { params: Promise<{ id: string }> }) {
           <CardHeader>
             <CardTitle>Nhóm thuyết trình</CardTitle>
             <CardDescription>
-              {event.students.length} sinh viên. Thứ tự ở đây là thứ tự bấm &quot;Nhóm tiếp&quot; trên màn chiếu.
+              {event.students.length} sinh viên. Bấm tên nhóm để xem danh sách sinh viên. Thứ tự ở đây là thứ tự bấm
+              &quot;Nhóm tiếp&quot; trên màn chiếu.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <GroupManager eventId={event.id} groups={groups} disabled={isArchived} />
+            <GroupManager eventId={event.id} groups={groups} ungroupedStudents={ungroupedStudents} disabled={isArchived} />
           </CardContent>
         </Card>
         <Card>

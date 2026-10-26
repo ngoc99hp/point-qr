@@ -106,6 +106,17 @@ test("a full class session from setup to CSV export", async ({ page, browser }) 
   await page.getByRole("button", { name: "Đóng", exact: true }).click();
   await expect(page.getByText("Chưa mở phiên chấm")).toBeVisible();
 
+  // Back from the projector to the class setup, then view Nhóm 2's students.
+  await page.getByRole("link", { name: "Về cấu hình lớp" }).click();
+  await expect(page.getByRole("heading", { name: TITLE })).toBeVisible();
+  // Name is "Nhóm 2 <n> SV"; the delete button ("Xóa Nhóm 2") also has aria-expanded.
+  const groupToggle = /^Nhóm 2 \d+ SV$/;
+  await page.getByRole("button", { name: groupToggle, expanded: false }).click();
+  const members = page.getByRole("button", { name: groupToggle, expanded: true }).locator("xpath=ancestor::li[1]");
+  await expect(members.getByText("Nguyễn Văn Bình")).toBeVisible();
+  await expect(members.getByText("Trần Thị Cúc")).toBeVisible();
+  await expect(members.getByText("Đào Anh Ngọc")).toHaveCount(0);
+
   // Export the summary CSV.
   await page.goto(`/events/${eventId}/results`);
   const downloadPromise = page.waitForEvent("download");
